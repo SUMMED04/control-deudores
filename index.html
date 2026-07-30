@@ -338,7 +338,7 @@ body.dark-mode .btn-icono.rojo:hover { background:#7f1d1d; }
         <input type="file" id="inputLogo" accept="image/*" style="display:none" onchange="cambiarLogo(event)">
         <div>
             <h1>💰 Sistema de Control de Deudores</h1>
-            <p>Registra prestamos y cobros con fecha y hora automatica</p>
+            <p>Registra préstamos y cobros con fecha y hora automatica</p>
         </div>
     </div>
 
@@ -350,12 +350,12 @@ body.dark-mode .btn-icono.rojo:hover { background:#7f1d1d; }
     </div>
 
     <div class="toolbar-row">
-        <input type="text" id="buscador" placeholder="🔍 Buscar deudor por nombre o telefono..." oninput="render()">
+        <input type="text" id="buscador" placeholder="🔍 Buscar deudor por nombre o teléfono..." oninput="render()">
         <select id="filtroEstado" onchange="render()">
             <option value="TODOS">Todos los estados</option>
             <option value="ATRASADO">Atrasados</option>
             <option value="POR_VENCER">Por vencer</option>
-            <option value="AL_DIA">Al dia</option>
+            <option value="AL_DIA">Al día</option>
             <option value="PAGADO">Pagados</option>
         </select>
         <select id="ordenar" onchange="render()">
@@ -388,7 +388,7 @@ body.dark-mode .btn-icono.rojo:hover { background:#7f1d1d; }
             <canvas id="chartHistorial"></canvas>
         </div>
         <div class="chart-container" style="height:350px">
-            <div class="chart-title">🥧 Distribucion del saldo pendiente</div>
+            <div class="chart-title">🥧 Distribución del saldo pendiente</div>
             <canvas id="chartPie"></canvas>
         </div>
     </div>
@@ -494,7 +494,7 @@ function analizar(d) {
     return { estado:'AL_DIA', saldo, prox, dias, mora:0 };
 }
 
-const ETIQUETA = { AL_DIA:'Al dia', POR_VENCER:'Por vencer', ATRASADO:'Atrasado', PAGADO:'Pagado' };
+const ETIQUETA = { AL_DIA:'Al día', POR_VENCER:'Por vencer', ATRASADO:'Atrasado', PAGADO:'Pagado' };
 
 // =====================================================================
 // PERSISTENCIA + MIGRACION DESDE LA VERSION VIEJA (deudor1 / deudor2)
@@ -503,7 +503,7 @@ function guardar() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(APP));
     } catch (e) {
-        toast('No se pudo guardar: el almacenamiento esta lleno. Exporta el Excel y borra deudores pagados.', 'error', 6000);
+        toast('No se pudo guardar: el almacenamiento está lleno. Exporta el Excel y borra deudores pagados.', 'error', 6000);
     }
 }
 
@@ -577,7 +577,7 @@ function migrarViejo() {
         if (localStorage.getItem(STORAGE_KEY)) {
             ['deudor1','deudor2','nombreD1','nombreD2'].forEach(k => localStorage.removeItem(k));
         }
-        setTimeout(() => toast(`Se migraron ${migrados} deudores de la version anterior`, 'exito', 5000), 600);
+        setTimeout(() => toast(`Se migraron ${migrados} deudores de la versión anterior`, 'exito', 5000), 600);
     }
 }
 
@@ -633,12 +633,12 @@ function render() {
     const grid = document.getElementById('gridDeudores');
     if (!APP.deudores.length) {
         grid.innerHTML = `<div class="vacio">
-            <h3>Todavia no tienes deudores</h3>
-            <p>Agrega el primero y empieza a registrar prestamos y cobros.</p>
+            <h3>Todavía no tienes deudores</h3>
+            <p>Agrega el primero y empieza a registrar préstamos y cobros.</p>
             <button class="btn btn-primary" onclick="abrirModalNuevo()">➕ Agregar mi primer deudor</button>
         </div>`;
     } else if (!lista.length) {
-        grid.innerHTML = `<div class="vacio"><h3>Sin resultados</h3><p>Ningun deudor coincide con la busqueda o el filtro.</p></div>`;
+        grid.innerHTML = `<div class="vacio"><h3>Sin resultados</h3><p>Ningún deudor coincide con la búsqueda o el filtro.</p></div>`;
     } else {
         grid.innerHTML = lista.map(x => tarjetaHTML(x.d, x.a)).join('');
     }
@@ -660,8 +660,8 @@ function renderAvisos(conAnalisis) {
     const item = (x, tipo) => {
         const a = x.a;
         const cuando = tipo === 'atraso'
-            ? `${a.mora} ${a.mora === 1 ? 'dia' : 'dias'} de atraso`
-            : (a.dias === 0 ? 'vence hoy' : `vence en ${a.dias} ${a.dias === 1 ? 'dia' : 'dias'}`);
+            ? `${a.mora} ${a.mora === 1 ? 'día' : 'días'} de atraso`
+            : (a.dias === 0 ? 'vence hoy' : `vence en ${a.dias} ${a.dias === 1 ? 'día' : 'días'}`);
         return `<div class="aviso-item ${tipo === 'atraso' ? '' : 'proximo'}" onclick="abrirModalPago('${x.d.id}')" title="Clic para registrar su pago">
             <span class="quien">${escapar(x.d.nombre)}</span>
             <span>debe ${money(Math.max(0, a.saldo))}</span>
@@ -671,8 +671,8 @@ function renderAvisos(conAnalisis) {
 
     const soloProximos = !atrasados.length;
     const titulo = atrasados.length
-        ? `${atrasados.length} ${atrasados.length === 1 ? 'deudor se paso' : 'deudores se pasaron'} de la fecha de pago`
-        : `${proximos.length} ${proximos.length === 1 ? 'pago esta' : 'pagos estan'} por vencer`;
+        ? `${atrasados.length} ${atrasados.length === 1 ? 'deudor se pasó' : 'deudores se pasaron'} de la fecha de pago`
+        : `${proximos.length} ${proximos.length === 1 ? 'pago está' : 'pagos están'} por vencer`;
 
     cont.innerHTML = `<div class="avisos ${soloProximos ? 'solo-proximos' : ''}">
         <h3>${soloProximos ? '🔔' : '⚠️'} ${titulo}
@@ -698,8 +698,8 @@ function estadoCampana() {
 function pedirPermisoAvisos() {
     if (!('Notification' in window)) return toast('Este navegador no soporta avisos', 'error');
     if (Notification.permission === 'denied')
-        return toast('Los avisos estan bloqueados. Habilitalos en los permisos del sitio.', 'error', 5000);
-    if (Notification.permission === 'granted') return toast('Los avisos ya estan activados', 'info');
+        return toast('Los avisos están bloqueados. Habilítalos en los permisos del sitio.', 'error', 5000);
+    if (Notification.permission === 'granted') return toast('Los avisos ya están activados', 'info');
     Notification.requestPermission().then(p => {
         render();
         if (p === 'granted') { toast('Avisos activados', 'exito'); avisarAtrasos(true); }
@@ -740,7 +740,7 @@ function tarjetaHTML(d, a) {
     } else if (a.estado === 'POR_VENCER') {
         venceHTML = `<div class="meta-row aviso">🔔 Vence el ${fmtFechaCorta(a.prox)} · ${a.dias === 0 ? 'hoy' : 'en ' + a.dias + (a.dias === 1 ? ' dia' : ' dias')}</div>`;
     } else {
-        venceHTML = `<div class="meta-row">📅 Proximo pago: ${fmtFechaCorta(a.prox)} · en ${a.dias} dias</div>`;
+        venceHTML = `<div class="meta-row">📅 Próximo pago: ${fmtFechaCorta(a.prox)} · en ${a.dias} días</div>`;
     }
 
     const telHTML = d.telefono
@@ -771,7 +771,7 @@ function tarjetaHTML(d, a) {
             ${notasHTML}
             <div class="acciones">
                 <button class="btn btn-primary btn-cobrar" onclick="abrirModalPago('${d.id}')">✅ Cobrar</button>
-                <button class="btn-icono warn" title="Aumentar deuda (nuevo prestamo)" onclick="abrirModalCargo('${d.id}')">➕</button>
+                <button class="btn-icono warn" title="Aumentar deuda (nuevo préstamo)" onclick="abrirModalCargo('${d.id}')">➕</button>
                 <button class="btn-icono gris" title="Editar deudor" onclick="abrirModalEditar('${d.id}')">✏️</button>
                 <button class="btn-icono rojo" title="Eliminar deudor" onclick="pedirEliminar('${d.id}')">🗑️</button>
             </div>
@@ -785,7 +785,7 @@ function tarjetaHTML(d, a) {
 
 function historialHTML(d) {
     const movs = movsOrdenados(d);
-    if (!movs.length) return `<p style="font-size:13px;color:#9ca3af;padding:10px 0">Sin movimientos todavia.</p>`;
+    if (!movs.length) return `<p style="font-size:13px;color:#9ca3af;padding:10px 0">Sin movimientos todavía.</p>`;
     let saldo = 0;
     const filas = movs.map(m => {
         saldo = r2(m.tipo === 'CARGO' ? saldo + m.monto : saldo - m.monto);
@@ -841,14 +841,14 @@ function abrirModalNuevo() {
             <input type="number" id="nMonto" step="0.01" min="0" placeholder="0.00" onkeydown="if(event.key==='Enter')crearDeudor()">
             <label>Cuota mensual sugerida (opcional)</label>
             <input type="number" id="nCuota" step="0.01" min="0" placeholder="40.00">
-            <label>Dia de pago de cada mes</label>
+            <label>Día de pago de cada mes</label>
             <input type="number" id="nDia" min="1" max="31" value="15">
-            <div class="ayuda">Si el mes no tiene ese dia, se usa el ultimo dia del mes.</div>
-            <label>Telefono (opcional)</label>
+            <div class="ayuda">Si el mes no tiene ese día, se usa el ultimo dia del mes.</div>
+            <label>Teléfono (opcional)</label>
             <input type="text" id="nTel" placeholder="0991234567">
             <div class="ayuda">Con el telefono aparece un boton para escribirle por WhatsApp.</div>
             <label>Notas (opcional)</label>
-            <textarea id="nNotas" placeholder="Motivo del prestamo, acuerdos..."></textarea>
+            <textarea id="nNotas" placeholder="Motivo del préstamo, acuerdos..."></textarea>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
@@ -864,7 +864,7 @@ function crearDeudor() {
 
     if (!nombre) return toast('Escribe el nombre del deudor', 'error');
     if (isNaN(monto) || monto <= 0) return toast('Ingresa el monto prestado', 'error');
-    if (isNaN(dia) || dia < 1 || dia > 31) return toast('El dia de pago debe estar entre 1 y 31', 'error');
+    if (isNaN(dia) || dia < 1 || dia > 31) return toast('El día de pago debe estar entre 1 y 31', 'error');
 
     const ahora = new Date().toISOString();
     APP.deudores.push({
@@ -873,7 +873,7 @@ function crearDeudor() {
         notas: document.getElementById('nNotas').value.trim(),
         diaPago: dia, pagoMensual: isNaN(cuota) ? 0 : r2(cuota),
         fechaCreacion: ahora,
-        movimientos: [{ id:genId('m'), tipo:'CARGO', ts:ahora, monto:r2(monto), nota:'Prestamo inicial' }]
+        movimientos: [{ id:genId('m'), tipo:'CARGO', ts:ahora, monto:r2(monto), nota:'Préstamo inicial' }]
     });
     guardar(); cerrarModal(); render();
     toast(`${nombre} agregado correctamente`, 'exito');
@@ -913,12 +913,12 @@ function previewPago(saldo) {
 
 function registrarPago(id, saldo) {
     const monto = parseFloat(document.getElementById('pMonto').value);
-    if (isNaN(monto) || monto <= 0) return toast('Ingresa un monto valido', 'error');
+    if (isNaN(monto) || monto <= 0) return toast('Ingresa un monto válido', 'error');
     if (monto > saldo + 0.001) return toast('El monto excede la deuda pendiente', 'error');
     registrarMovimiento(id, 'PAGO', monto, document.getElementById('pNota').value.trim());
     cerrarModal();
     const d = buscarDeudor(id);
-    if (saldoDe(d) <= 0) { lanzarConfetti(); toast(`${d.nombre} termino de pagar 🎉`, 'exito', 5000); }
+    if (saldoDe(d) <= 0) { lanzarConfetti(); toast(`${d.nombre} terminó de pagar 🎉`, 'exito', 5000); }
     else toast('Pago registrado con fecha y hora', 'exito');
 }
 
@@ -932,7 +932,7 @@ function abrirModalCargo(id) {
             <input type="number" id="cMonto" step="0.01" min="0" placeholder="0.00"
                    oninput="previewCargo(${saldo})" onkeydown="if(event.key==='Enter')registrarCargo('${id}')">
             <label>Motivo (opcional)</label>
-            <input type="text" id="cNota" placeholder="Segundo prestamo, interes...">
+            <input type="text" id="cNota" placeholder="Segundo préstamo, interés...">
             <div class="modal-preview">
                 Saldo actual: ${money(saldo)}<br>
                 Saldo nuevo: <strong id="cResultado">${money(saldo)}</strong>
@@ -951,7 +951,7 @@ function previewCargo(saldo) {
 
 function registrarCargo(id) {
     const monto = parseFloat(document.getElementById('cMonto').value);
-    if (isNaN(monto) || monto <= 0) return toast('Ingresa un monto valido', 'error');
+    if (isNaN(monto) || monto <= 0) return toast('Ingresa un monto válido', 'error');
     registrarMovimiento(id, 'CARGO', monto, document.getElementById('cNota').value.trim());
     cerrarModal();
     toast('Deuda aumentada', 'exito');
@@ -966,9 +966,9 @@ function abrirModalEditar(id) {
             <input type="text" id="eNombre" value="${escapar(d.nombre)}">
             <label>Cuota mensual sugerida</label>
             <input type="number" id="eCuota" step="0.01" min="0" value="${d.pagoMensual || ''}">
-            <label>Dia de pago de cada mes</label>
+            <label>Día de pago de cada mes</label>
             <input type="number" id="eDia" min="1" max="31" value="${d.diaPago}">
-            <label>Telefono</label>
+            <label>Teléfono</label>
             <input type="text" id="eTel" value="${escapar(d.telefono || '')}">
             <label>Notas</label>
             <textarea id="eNotas">${escapar(d.notas || '')}</textarea>
@@ -984,8 +984,8 @@ function guardarEdicion(id) {
     const d = buscarDeudor(id); if (!d) return;
     const nombre = document.getElementById('eNombre').value.trim();
     const dia = parseInt(document.getElementById('eDia').value, 10);
-    if (!nombre) return toast('El nombre no puede quedar vacio', 'error');
-    if (isNaN(dia) || dia < 1 || dia > 31) return toast('El dia de pago debe estar entre 1 y 31', 'error');
+    if (!nombre) return toast('El nombre no puede quedar vacío', 'error');
+    if (isNaN(dia) || dia < 1 || dia > 31) return toast('El día de pago debe estar entre 1 y 31', 'error');
     const cuota = parseFloat(document.getElementById('eCuota').value);
     d.nombre = nombre; d.diaPago = dia;
     d.pagoMensual = isNaN(cuota) ? 0 : r2(cuota);
@@ -1003,12 +1003,12 @@ function pedirEliminar(id) {
             <p style="font-size:15px;line-height:1.6">Vas a eliminar a <strong>${escapar(d.nombre)}</strong>
             junto con sus <strong>${d.movimientos.length} movimientos</strong> y un saldo pendiente de
             <strong>${money(Math.max(0, saldoDe(d)))}</strong>.</p>
-            <p style="font-size:14px;color:#ef4444;margin-top:12px">Esta accion no se puede deshacer.</p>
+            <p style="font-size:14px;color:#ef4444;margin-top:12px">Esta acción no se puede deshacer.</p>
             <div class="ayuda" style="margin-top:14px">Si no estas seguro, exporta antes el Excel: ahi queda todo su historial.</div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
-            <button class="btn btn-danger" onclick="eliminarDeudor('${id}')">Si, eliminar</button>
+            <button class="btn btn-danger" onclick="eliminarDeudor('${id}')">Sí, eliminar</button>
         </div>`);
 }
 
@@ -1026,11 +1026,11 @@ function pedirBorrarTodo() {
         <div class="modal-body">
             <p style="font-size:15px;line-height:1.6">Se eliminaran los <strong>${APP.deudores.length} deudores</strong>
             y todo su historial de movimientos.</p>
-            <p style="font-size:14px;color:#ef4444;margin-top:12px">Esta accion no se puede deshacer.</p>
+            <p style="font-size:14px;color:#ef4444;margin-top:12px">Esta acción no se puede deshacer.</p>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
-            <button class="btn btn-danger" onclick="borrarTodo()">Si, borrar todo</button>
+            <button class="btn btn-danger" onclick="borrarTodo()">Sí, borrar todo</button>
         </div>`);
 }
 
@@ -1147,7 +1147,7 @@ const XL = {
 
 async function exportarExcel() {
     if (!APP.deudores.length) return toast('No hay deudores que exportar', 'error');
-    if (typeof ExcelJS === 'undefined') return toast('No se cargo la libreria de Excel (lib/exceljs.min.js)', 'error', 6000);
+    if (typeof ExcelJS === 'undefined') return toast('No se cargó la librería de Excel (lib/exceljs.min.js)', 'error', 6000);
     toast('Generando el Excel...', 'info');
 
     const conA = APP.deudores.map(d => ({ d, a: analizar(d) })).sort((x,y) => y.a.saldo - x.a.saldo);
@@ -1199,7 +1199,7 @@ async function exportarExcel() {
     rs.getRow(5).height = 24;
 
     // Tabla de deudores
-    const CAB = ['Deudor','Telefono','Dia pago','Prestado','Pagado','Saldo','Estado','Dias mora'];
+    const CAB = ['Deudor','Teléfono','Día pago','Prestado','Pagado','Saldo','Estado','Días mora'];
     const filaCab = 7;
     const rc = rs.getRow(filaCab);
     CAB.forEach((h, i) => {
@@ -1269,7 +1269,7 @@ async function exportarExcel() {
     rs.addImage(imgBarras, { tl:{ col:0, row:filaGraf }, ext:{ width:760, height:340 } });
 
     const filaGraf2 = filaGraf + 19;
-    rs.getCell(`A${filaGraf2}`).value = 'Distribucion del saldo pendiente';
+    rs.getCell(`A${filaGraf2}`).value = 'Distribución del saldo pendiente';
     rs.getCell(`A${filaGraf2}`).font = { name:'Segoe UI', size:11, bold:true };
     const imgPie = wb.addImage({ base64: graficoPNG({
         type:'doughnut',
@@ -1284,11 +1284,11 @@ async function exportarExcel() {
     });
     ms.columns = [
         { header:'DEUDOR',     key:'deudor', width:24 },
-        { header:'TELEFONO',   key:'tel',    width:15 },
+        { header:'TELÉFONO',   key:'tel',    width:15 },
         { header:'FECHA',      key:'fecha',  width:13 },
         { header:'HORA',       key:'hora',   width:9 },
         { header:'TIPO',       key:'tipo',   width:12 },
-        { header:'PRESTAMO',   key:'cargo',  width:13 },
+        { header:'PRÉSTAMO',   key:'cargo',  width:13 },
         { header:'PAGO',       key:'pago',   width:13 },
         { header:'SALDO',      key:'saldo',  width:13 },
         { header:'NOTA',       key:'nota',   width:32 }
@@ -1311,7 +1311,7 @@ async function exportarExcel() {
             const fila = ms.addRow({
                 deudor: x.d.nombre, tel: x.d.telefono || '',
                 fecha: f, hora: `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}`,
-                tipo: esCargo ? 'Prestamo' : 'Pago',
+                tipo: esCargo ? 'Préstamo' : 'Pago',
                 cargo: esCargo ? m.monto : null,
                 pago: esCargo ? null : m.monto,
                 saldo, nota: m.nota || ''
@@ -1338,7 +1338,7 @@ async function exportarExcel() {
     const buf = await wb.xlsx.writeBuffer();
     descargarBlob(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
                   nombreArchivo('xlsx'));
-    toast('Excel descargado con graficas', 'exito');
+    toast('Excel descargado con gráficas', 'exito');
 }
 
 function generarPDF() {
@@ -1373,7 +1373,7 @@ function generarPDF() {
             return `<tr>
                 <td>${String(f.getDate()).padStart(2,'0')} ${MESES[f.getMonth()]} ${f.getFullYear()}</td>
                 <td class="c gris">${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}</td>
-                <td>${esCargo ? 'Prestamo' : 'Pago'}</td>
+                <td>${esCargo ? 'Préstamo' : 'Pago'}</td>
                 <td class="n">${esCargo ? dinero(m.monto) : ''}</td>
                 <td class="n">${esCargo ? '' : dinero(m.monto)}</td>
                 <td class="n fuerte">${dinero(saldo)}</td>
@@ -1520,9 +1520,9 @@ function generarPDF() {
         </body></html>`;
 
     const w = window.open('', '_blank');
-    if (!w) return toast('El navegador bloqueo la ventana emergente. Permitela para generar el PDF.', 'error', 6000);
+    if (!w) return toast('El navegador bloqueó la ventana emergente. Permítela para generar el PDF.', 'error', 6000);
     w.document.write(html); w.document.close();
-    toast('Elige "Guardar como PDF" en el dialogo de impresion', 'info', 5000);
+    toast('Elige "Guardar como PDF" en el diálogo de impresión', 'info', 5000);
 }
 
 // =====================================================================
@@ -1532,7 +1532,7 @@ function cambiarLogo(event) {
     const f = event.target.files[0];
     if (!f) return;
     if (!f.type.startsWith('image/')) return toast('Selecciona un archivo de imagen', 'error');
-    if (f.size > 2 * 1024 * 1024) return toast('La imagen es muy grande. Maximo 2MB.', 'error');
+    if (f.size > 2 * 1024 * 1024) return toast('La imagen es muy grande. Máximo 2MB.', 'error');
     const reader = new FileReader();
     reader.onload = e => {
         document.getElementById('logoImg').src = e.target.result;
