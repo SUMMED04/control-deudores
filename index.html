@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Control de Deudores</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<!-- Librerias en local: la app se abre con doble clic desde el disco y tiene
+     que funcionar sin internet. Si estuvieran en un CDN, el boton de Excel
+     fallaria en silencio al no haber conexion. -->
+<script src="lib/chart.min.js"></script>
+<script src="lib/exceljs.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
@@ -63,6 +67,48 @@ body {
 }
 .toolbar-row input[type="text"] { flex:1; min-width:200px; }
 .toolbar-row input:focus, .toolbar-row select:focus { outline:none; border-color:#667eea; }
+
+/* ---------- PANEL DE AVISOS ---------- */
+.avisos {
+    background:white; border-radius:10px; padding:16px 18px; margin-bottom:20px;
+    box-shadow:0 1px 3px rgba(16,24,40,0.06), 0 8px 24px rgba(16,24,40,0.07);
+    border-left:5px solid #ef4444;
+}
+.avisos.solo-proximos { border-left-color:#f59e0b; }
+.avisos h3 {
+    font-size:15px; margin-bottom:12px; color:#b91c1c;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+.avisos.solo-proximos h3 { color:#b45309; }
+.avisos h3 .btn-campana {
+    margin-left:auto; background:none; border:1px solid #d1d5db; color:#6b7280;
+    font-size:12px; font-weight:bold; padding:5px 12px; border-radius:20px;
+    cursor:pointer; font-family:inherit;
+}
+.avisos h3 .btn-campana:hover { background:#f3f4f6; }
+.aviso-item {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:9px 12px; border-radius:6px; margin-bottom:6px; font-size:14px;
+    background:#fef2f2; cursor:pointer; transition:background 0.15s;
+}
+.aviso-item:hover { background:#fee2e2; }
+.aviso-item.proximo { background:#fffbeb; }
+.aviso-item.proximo:hover { background:#fef3c7; }
+.aviso-item:last-child { margin-bottom:0; }
+.aviso-item .quien { font-weight:bold; }
+.aviso-item .cuanto { margin-left:auto; font-weight:bold; color:#b91c1c; }
+.aviso-item.proximo .cuanto { color:#b45309; }
+body.dark-mode .avisos { background:#2a2a3e; }
+body.dark-mode .avisos h3 { color:#f87171; }
+body.dark-mode .avisos.solo-proximos h3 { color:#fbbf24; }
+body.dark-mode .avisos h3 .btn-campana { border-color:#4b5563; color:#9ca3af; }
+body.dark-mode .avisos h3 .btn-campana:hover { background:#3a3a4e; }
+body.dark-mode .aviso-item { background:#4a1d1d; color:#fecaca; }
+body.dark-mode .aviso-item:hover { background:#5f2424; }
+body.dark-mode .aviso-item.proximo { background:#4a3410; color:#fde68a; }
+body.dark-mode .aviso-item.proximo:hover { background:#5c4114; }
+body.dark-mode .aviso-item .cuanto { color:#f87171; }
+body.dark-mode .aviso-item.proximo .cuanto { color:#fbbf24; }
 
 /* ---------- RESUMEN ---------- */
 .summary-row {
@@ -321,6 +367,8 @@ body.dark-mode .btn-icono.rojo:hover { background:#7f1d1d; }
         <button class="btn btn-primary" onclick="abrirModalNuevo()">➕ Nuevo deudor</button>
     </div>
 
+    <div id="panelAvisos"></div>
+
     <div class="summary-row">
         <div class="summary-card"><div class="label">Por cobrar</div><div class="value" id="sumSaldo" style="color:#667eea">$0.00</div></div>
         <div class="summary-card"><div class="label">Cobrado</div><div class="value" id="sumCobrado" style="color:#10b981">$0.00</div></div>
@@ -395,6 +443,7 @@ function fmtFechaHora(iso) {
     return `${dd} ${MESES[d.getMonth()]} ${d.getFullYear()} · ${hh}:${mi}`;
 }
 function fmtFechaCorta(d) { return `${d.getDate()} ${MESES[d.getMonth()]}`; }
+function fechaISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
 // Proxima fecha de corte (>= hoy) segun el dia de pago del deudor.
 // Math.min con el ultimo dia del mes resuelve "dia 31" en febrero.
@@ -594,8 +643,88 @@ function render() {
         grid.innerHTML = lista.map(x => tarjetaHTML(x.d, x.a)).join('');
     }
 
+    renderAvisos(conAnalisis);
     document.getElementById('zonaGraficos').style.display = APP.deudores.length ? '' : 'none';
     if (APP.deudores.length) actualizarGraficos(conAnalisis);
+}
+
+// Panel de avisos: solo aparece si alguien debe. En cuanto se registra el
+// pago, analizar() devuelve AL_DIA y el aviso desaparece solo.
+function renderAvisos(conAnalisis) {
+    const cont = document.getElementById('panelAvisos');
+    const atrasados = conAnalisis.filter(x => x.a.estado === 'ATRASADO').sort((a,b) => b.a.mora - a.a.mora);
+    const proximos  = conAnalisis.filter(x => x.a.estado === 'POR_VENCER').sort((a,b) => a.a.dias - b.a.dias);
+
+    if (!atrasados.length && !proximos.length) { cont.innerHTML = ''; return; }
+
+    const item = (x, tipo) => {
+        const a = x.a;
+        const cuando = tipo === 'atraso'
+            ? `${a.mora} ${a.mora === 1 ? 'dia' : 'dias'} de atraso`
+            : (a.dias === 0 ? 'vence hoy' : `vence en ${a.dias} ${a.dias === 1 ? 'dia' : 'dias'}`);
+        return `<div class="aviso-item ${tipo === 'atraso' ? '' : 'proximo'}" onclick="abrirModalPago('${x.d.id}')" title="Clic para registrar su pago">
+            <span class="quien">${escapar(x.d.nombre)}</span>
+            <span>debe ${money(Math.max(0, a.saldo))}</span>
+            <span class="cuanto">${cuando}</span>
+        </div>`;
+    };
+
+    const soloProximos = !atrasados.length;
+    const titulo = atrasados.length
+        ? `${atrasados.length} ${atrasados.length === 1 ? 'deudor se paso' : 'deudores se pasaron'} de la fecha de pago`
+        : `${proximos.length} ${proximos.length === 1 ? 'pago esta' : 'pagos estan'} por vencer`;
+
+    cont.innerHTML = `<div class="avisos ${soloProximos ? 'solo-proximos' : ''}">
+        <h3>${soloProximos ? '🔔' : '⚠️'} ${titulo}
+            <button class="btn-campana" onclick="pedirPermisoAvisos()" title="Recibir un aviso del navegador al abrir la app">${estadoCampana()}</button>
+        </h3>
+        ${atrasados.map(x => item(x, 'atraso')).join('')}
+        ${proximos.map(x => item(x, 'proximo')).join('')}
+    </div>`;
+}
+
+// =====================================================================
+// AVISOS DEL NAVEGADOR
+// Se manda como maximo uno por dia: abrir la app cinco veces seguidas no
+// tiene que disparar cinco notificaciones iguales.
+// =====================================================================
+function estadoCampana() {
+    if (!('Notification' in window)) return 'Sin avisos';
+    if (Notification.permission === 'granted') return '🔔 Avisos activados';
+    if (Notification.permission === 'denied') return 'Avisos bloqueados';
+    return '🔕 Activar avisos';
+}
+
+function pedirPermisoAvisos() {
+    if (!('Notification' in window)) return toast('Este navegador no soporta avisos', 'error');
+    if (Notification.permission === 'denied')
+        return toast('Los avisos estan bloqueados. Habilitalos en los permisos del sitio.', 'error', 5000);
+    if (Notification.permission === 'granted') return toast('Los avisos ya estan activados', 'info');
+    Notification.requestPermission().then(p => {
+        render();
+        if (p === 'granted') { toast('Avisos activados', 'exito'); avisarAtrasos(true); }
+        else toast('No se activaron los avisos', 'info');
+    });
+}
+
+function avisarAtrasos(forzar) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const hoyISO = fechaISO(hoyLocal());
+    if (!forzar && localStorage.getItem('ultimoAviso') === hoyISO) return;
+
+    const atrasados = APP.deudores.map(d => ({ d, a: analizar(d) })).filter(x => x.a.estado === 'ATRASADO');
+    if (!atrasados.length) return;
+
+    const total = r2(atrasados.reduce((s,x) => s + x.a.saldo, 0));
+    const cuerpo = atrasados.slice(0, 4)
+        .map(x => `${x.d.nombre}: ${money(Math.max(0,x.a.saldo))} (${x.a.mora}d)`).join('\n')
+        + (atrasados.length > 4 ? `\ny ${atrasados.length - 4} mas` : '');
+
+    try {
+        new Notification(`${atrasados.length} ${atrasados.length === 1 ? 'deudor atrasado' : 'deudores atrasados'}: ${money(total)}`,
+            { body: cuerpo, icon: document.getElementById('logoImg').src, tag: 'deudores-atraso' });
+        localStorage.setItem('ultimoAviso', hoyISO);
+    } catch (e) { /* algunos navegadores bloquean Notification desde file:// */ }
 }
 
 function tarjetaHTML(d, a) {
@@ -982,8 +1111,7 @@ function nombreArchivo(ext) {
     const d = new Date();
     return `Deudores_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.${ext}`;
 }
-function descargar(contenido, archivo, tipo) {
-    const blob = new Blob([contenido], { type: tipo });
+function descargarBlob(blob, archivo) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = archivo;
@@ -991,113 +1119,404 @@ function descargar(contenido, archivo, tipo) {
     URL.revokeObjectURL(url);
 }
 
-function exportarExcel() {
+// Genera la imagen de un grafico en un canvas aparte, en colores claros y
+// sin animacion. Asi la imagen del Excel no depende de si la pantalla esta
+// en modo oscuro ni de que la animacion haya terminado.
+function graficoPNG(config, ancho, alto) {
+    const cv = document.createElement('canvas');
+    cv.width = ancho; cv.height = alto;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, ancho, alto);
+    config.options = Object.assign({}, config.options, { animation:false, responsive:false });
+    const ch = new Chart(cv, config);
+    const url = cv.toDataURL('image/png');
+    ch.destroy();
+    return url;
+}
+
+const XL = {
+    INDIGO:  'FF4F46E5',
+    GRIS_TX: 'FF6B7280',
+    ZEBRA:   'FFF7F7FA',
+    BORDE:   'FFE5E7EB',
+    VERDE:   'FF059669',
+    AMBAR:   'FFB45309',
+    ROJO:    'FFDC2626',
+    MONEDA:  '"$"#,##0.00'
+};
+
+async function exportarExcel() {
     if (!APP.deudores.length) return toast('No hay deudores que exportar', 'error');
-    let filas = '';
-    APP.deudores.forEach(d => {
-        const a = analizar(d);
-        let saldo = 0;
-        movsOrdenados(d).forEach(m => {
-            saldo = r2(m.tipo === 'CARGO' ? saldo + m.monto : saldo - m.monto);
-            filas += `<tr>
-                <td>${escapar(d.nombre)}</td>
-                <td>${escapar(d.telefono || '')}</td>
-                <td>${fmtFechaHora(m.ts)}</td>
-                <td>${m.tipo === 'CARGO' ? 'Prestamo' : 'Pago'}</td>
-                <td>${m.tipo === 'CARGO' ? '' : m.monto.toFixed(2)}</td>
-                <td>${m.tipo === 'CARGO' ? m.monto.toFixed(2) : ''}</td>
-                <td>${saldo.toFixed(2)}</td>
-                <td>${escapar(m.nota || '')}</td>
-            </tr>`;
-        });
-        filas += `<tr><td colspan="8" style="background:#eef2ff;font-weight:bold">
-            ${escapar(d.nombre)} — Saldo final: $${Math.max(0,a.saldo).toFixed(2)} — Estado: ${ETIQUETA[a.estado]}
-            ${a.estado === 'ATRASADO' ? '(' + a.mora + ' dias de mora)' : ''}</td></tr>`;
+    if (typeof ExcelJS === 'undefined') return toast('No se cargo la libreria de Excel (lib/exceljs.min.js)', 'error', 6000);
+    toast('Generando el Excel...', 'info');
+
+    const conA = APP.deudores.map(d => ({ d, a: analizar(d) })).sort((x,y) => y.a.saldo - x.a.saldo);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sistema de Control de Deudores';
+    wb.created = new Date();
+
+    // ---------- HOJA 1: RESUMEN ----------
+    const rs = wb.addWorksheet('Resumen', { views:[{ showGridLines:false }] });
+    rs.columns = [
+        { width:26 }, { width:16 }, { width:11 }, { width:14 },
+        { width:14 }, { width:14 }, { width:14 }, { width:12 }
+    ];
+
+    rs.mergeCells('A1:H1');
+    const tit = rs.getCell('A1');
+    tit.value = 'Control de deudores';
+    tit.font = { name:'Segoe UI', size:18, bold:true, color:{ argb:'FFFFFFFF' } };
+    tit.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.INDIGO } };
+    tit.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+    rs.getRow(1).height = 34;
+
+    rs.mergeCells('A2:H2');
+    const sub = rs.getCell('A2');
+    sub.value = 'Generado el ' + new Date().toLocaleString('es-EC');
+    sub.font = { name:'Segoe UI', size:9, color:{ argb:XL.GRIS_TX } };
+    sub.alignment = { indent:1 };
+
+    const totalSaldo = r2(conA.reduce((s,x) => s + Math.max(0, x.a.saldo), 0));
+    const totalPag   = r2(APP.deudores.reduce((s,d) => s + totalPagado(d), 0));
+    const totalMora  = r2(conA.filter(x => x.a.estado === 'ATRASADO').reduce((s,x) => s + x.a.saldo, 0));
+
+    const kpis = [
+        ['Por cobrar', totalSaldo, XL.INDIGO],
+        ['Cobrado',    totalPag,   XL.VERDE],
+        ['Atrasado',   totalMora,  XL.ROJO],
+        ['Deudores',   APP.deudores.length, XL.GRIS_TX]
+    ];
+    kpis.forEach((k, i) => {
+        const col = 1 + i * 2;
+        const cEt = rs.getRow(4).getCell(col);
+        cEt.value = k[0].toUpperCase();
+        cEt.font = { name:'Segoe UI', size:8, bold:true, color:{ argb:XL.GRIS_TX } };
+        const cVa = rs.getRow(5).getCell(col);
+        cVa.value = k[1];
+        cVa.font = { name:'Segoe UI', size:16, bold:true, color:{ argb:k[2] } };
+        if (i < 3) cVa.numFmt = XL.MONEDA;
+    });
+    rs.getRow(5).height = 24;
+
+    // Tabla de deudores
+    const CAB = ['Deudor','Telefono','Dia pago','Prestado','Pagado','Saldo','Estado','Dias mora'];
+    const filaCab = 7;
+    const rc = rs.getRow(filaCab);
+    CAB.forEach((h, i) => {
+        const c = rc.getCell(i + 1);
+        c.value = h.toUpperCase();
+        c.font = { name:'Segoe UI', size:9, bold:true, color:{ argb:XL.GRIS_TX } };
+        c.border = { bottom:{ style:'medium', color:{ argb:XL.INDIGO } } };
+        c.alignment = { horizontal: i >= 3 && i <= 5 ? 'right' : 'left' };
     });
 
-    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8">
-        <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-        <x:Name>Movimientos</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-        </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-        <style>body{font-family:'Segoe UI',sans-serif;padding:20px}
-        table{border-collapse:collapse;width:100%;font-size:13px}
-        th{background:#667eea;color:white;padding:10px;border:1px solid #5a6fd6}
-        td{padding:8px;border:1px solid #d1d5db}</style></head><body>
-        <h2>Reporte de deudores — ${new Date().toLocaleString('es-EC')}</h2>
-        <table><tr><th>Deudor</th><th>Telefono</th><th>Fecha y hora</th><th>Tipo</th>
-        <th>Pago</th><th>Prestamo</th><th>Saldo</th><th>Nota</th></tr>${filas}</table>
-        </body></html>`;
-    descargar('﻿' + html, nombreArchivo('xls'), 'application/vnd.ms-excel');
-    toast('Excel descargado', 'exito');
+    conA.forEach((x, i) => {
+        const f = rs.getRow(filaCab + 1 + i);
+        const est = x.a.estado;
+        f.getCell(1).value = x.d.nombre;
+        // El telefono va como TEXTO: si se guarda como numero, Excel borra el
+        // cero inicial y 0991112233 se convierte en 991112233.
+        const cTel = f.getCell(2);
+        cTel.value = x.d.telefono || '';
+        cTel.numFmt = '@';
+        f.getCell(3).value = x.d.diaPago;
+        f.getCell(4).value = totalPrestado(x.d);
+        f.getCell(5).value = totalPagado(x.d);
+        f.getCell(6).value = Math.max(0, x.a.saldo);
+        f.getCell(7).value = ETIQUETA[est];
+        f.getCell(8).value = est === 'ATRASADO' ? x.a.mora : '';
+        [4,5,6].forEach(c => { f.getCell(c).numFmt = XL.MONEDA; f.getCell(c).alignment = { horizontal:'right' }; });
+        f.getCell(3).alignment = { horizontal:'center' };
+        f.getCell(8).alignment = { horizontal:'center' };
+        f.getCell(6).font = { name:'Segoe UI', size:11, bold:true };
+        f.getCell(7).font = { name:'Segoe UI', size:10, bold:true, color:{ argb:
+            est === 'ATRASADO' ? XL.ROJO : est === 'POR_VENCER' ? XL.AMBAR :
+            est === 'PAGADO' ? XL.INDIGO : XL.VERDE } };
+        for (let c = 1; c <= 8; c++) {
+            f.getCell(c).border = { bottom:{ style:'thin', color:{ argb:XL.BORDE } } };
+            if (i % 2) f.getCell(c).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.ZEBRA } };
+        }
+    });
+
+    const filaTot = filaCab + 1 + conA.length;
+    const ft = rs.getRow(filaTot);
+    ft.getCell(1).value = 'TOTAL';
+    ft.getCell(1).font = { name:'Segoe UI', size:10, bold:true };
+    [[4, r2(APP.deudores.reduce((s,d) => s + totalPrestado(d), 0))], [5, totalPag], [6, totalSaldo]]
+        .forEach(([c, v]) => {
+            const cel = ft.getCell(c);
+            cel.value = v; cel.numFmt = XL.MONEDA;
+            cel.font = { name:'Segoe UI', size:10, bold:true };
+            cel.alignment = { horizontal:'right' };
+        });
+    for (let c = 1; c <= 8; c++) ft.getCell(c).border = { top:{ style:'medium', color:{ argb:'FF9CA3AF' } } };
+
+    // Graficas como imagen: ExcelJS no sabe crear graficos nativos de Excel,
+    // pero si insertar imagenes, y para leer un reporte da igual.
+    const top = topDeudores(conA, 8);
+    const filaGraf = filaTot + 2;
+    rs.getCell(`A${filaGraf}`).value = 'Pendiente vs cobrado por deudor';
+    rs.getCell(`A${filaGraf}`).font = { name:'Segoe UI', size:11, bold:true };
+
+    const imgBarras = wb.addImage({ base64: graficoPNG({
+        type:'bar',
+        data:{ labels: top.nombres, datasets:[
+            { label:'Pendiente', data: top.saldos,  backgroundColor:'#4f46e5' },
+            { label:'Cobrado',   data: top.pagados, backgroundColor:'#10b981' } ] },
+        options:{ plugins:{ legend:{ labels:{ color:'#374151' } } },
+                  scales:{ x:{ ticks:{ color:'#6b7280' } }, y:{ beginAtZero:true, ticks:{ color:'#6b7280' } } } }
+    }, 760, 340), extension:'png' });
+    rs.addImage(imgBarras, { tl:{ col:0, row:filaGraf }, ext:{ width:760, height:340 } });
+
+    const filaGraf2 = filaGraf + 19;
+    rs.getCell(`A${filaGraf2}`).value = 'Distribucion del saldo pendiente';
+    rs.getCell(`A${filaGraf2}`).font = { name:'Segoe UI', size:11, bold:true };
+    const imgPie = wb.addImage({ base64: graficoPNG({
+        type:'doughnut',
+        data:{ labels: top.nombres, datasets:[{ data: top.saldos, backgroundColor:PALETA, borderWidth:0 }] },
+        options:{ plugins:{ legend:{ position:'right', labels:{ color:'#374151', boxWidth:14 } } } }
+    }, 560, 320), extension:'png' });
+    rs.addImage(imgPie, { tl:{ col:0, row:filaGraf2 }, ext:{ width:560, height:320 } });
+
+    // ---------- HOJA 2: MOVIMIENTOS ----------
+    const ms = wb.addWorksheet('Movimientos', {
+        views:[{ state:'frozen', ySplit:1, showGridLines:false }]
+    });
+    ms.columns = [
+        { header:'DEUDOR',     key:'deudor', width:24 },
+        { header:'TELEFONO',   key:'tel',    width:15 },
+        { header:'FECHA',      key:'fecha',  width:13 },
+        { header:'HORA',       key:'hora',   width:9 },
+        { header:'TIPO',       key:'tipo',   width:12 },
+        { header:'PRESTAMO',   key:'cargo',  width:13 },
+        { header:'PAGO',       key:'pago',   width:13 },
+        { header:'SALDO',      key:'saldo',  width:13 },
+        { header:'NOTA',       key:'nota',   width:32 }
+    ];
+    const rcab = ms.getRow(1);
+    rcab.height = 22;
+    rcab.eachCell(c => {
+        c.font = { name:'Segoe UI', size:9, bold:true, color:{ argb:'FFFFFFFF' } };
+        c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.INDIGO } };
+        c.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+    });
+
+    let n = 0;
+    conA.forEach(x => {
+        let saldo = 0;
+        movsOrdenados(x.d).forEach(m => {
+            const esCargo = m.tipo === 'CARGO';
+            saldo = r2(esCargo ? saldo + m.monto : saldo - m.monto);
+            const f = new Date(m.ts);
+            const fila = ms.addRow({
+                deudor: x.d.nombre, tel: x.d.telefono || '',
+                fecha: f, hora: `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}`,
+                tipo: esCargo ? 'Prestamo' : 'Pago',
+                cargo: esCargo ? m.monto : null,
+                pago: esCargo ? null : m.monto,
+                saldo, nota: m.nota || ''
+            });
+            fila.getCell('tel').numFmt = '@';
+            fila.getCell('fecha').numFmt = 'dd/mm/yyyy';
+            fila.getCell('hora').alignment = { horizontal:'center' };
+            ['cargo','pago','saldo'].forEach(k => {
+                fila.getCell(k).numFmt = XL.MONEDA;
+                fila.getCell(k).alignment = { horizontal:'right' };
+            });
+            fila.getCell('cargo').font = { name:'Segoe UI', size:10, color:{ argb:XL.AMBAR } };
+            fila.getCell('pago').font  = { name:'Segoe UI', size:10, color:{ argb:XL.VERDE } };
+            fila.getCell('saldo').font = { name:'Segoe UI', size:10, bold:true };
+            fila.eachCell({ includeEmpty:true }, c => {
+                c.border = { bottom:{ style:'thin', color:{ argb:XL.BORDE } } };
+                if (n % 2) c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.ZEBRA } };
+            });
+            n++;
+        });
+    });
+    ms.autoFilter = { from:'A1', to:{ row:1, column:9 } };
+
+    const buf = await wb.xlsx.writeBuffer();
+    descargarBlob(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+                  nombreArchivo('xlsx'));
+    toast('Excel descargado con graficas', 'exito');
 }
 
 function generarPDF() {
     if (!APP.deudores.length) return toast('No hay deudores que exportar', 'error');
     const logo = document.getElementById('logoImg').src;
-    const totalSaldo = r2(APP.deudores.reduce((s,d) => s + Math.max(0, saldoDe(d)), 0));
-    const totalPag = r2(APP.deudores.reduce((s,d) => s + totalPagado(d), 0));
+    const conA = APP.deudores.map(d => ({ d, a: analizar(d) })).sort((x,y) => y.a.saldo - x.a.saldo);
+    const dinero = n => '$' + n.toFixed(2);
 
-    let cuerpo = '';
-    APP.deudores.forEach(d => {
-        const a = analizar(d);
+    const totalSaldo = r2(conA.reduce((s,x) => s + Math.max(0, x.a.saldo), 0));
+    const totalPag   = r2(APP.deudores.reduce((s,d) => s + totalPagado(d), 0));
+    const totalPrest = r2(APP.deudores.reduce((s,d) => s + totalPrestado(d), 0));
+    const atrasados  = conA.filter(x => x.a.estado === 'ATRASADO');
+
+    // Tabla resumen de toda la cartera
+    const resumen = conA.map(x => `<tr>
+        <td>${escapar(x.d.nombre)}</td>
+        <td class="n">${dinero(totalPrestado(x.d))}</td>
+        <td class="n">${dinero(totalPagado(x.d))}</td>
+        <td class="n fuerte">${dinero(Math.max(0, x.a.saldo))}</td>
+        <td><span class="pt ${x.a.estado}"></span>${ETIQUETA[x.a.estado]}${x.a.estado === 'ATRASADO' ? ' (' + x.a.mora + ' d)' : ''}</td>
+        <td class="c">${x.a.estado === 'PAGADO' ? '' : fmtFechaCorta(x.a.prox)}</td>
+    </tr>`).join('');
+
+    // Un estado de cuenta por deudor
+    const cuerpo = conA.map(x => {
+        const d = x.d, a = x.a;
         let saldo = 0;
         const filas = movsOrdenados(d).map(m => {
-            saldo = r2(m.tipo === 'CARGO' ? saldo + m.monto : saldo - m.monto);
+            const esCargo = m.tipo === 'CARGO';
+            saldo = r2(esCargo ? saldo + m.monto : saldo - m.monto);
+            const f = new Date(m.ts);
             return `<tr>
-                <td>${fmtFechaHora(m.ts)}</td>
-                <td>${m.tipo === 'CARGO' ? 'Prestamo' : 'Pago'}</td>
-                <td style="color:${m.tipo === 'CARGO' ? '#d97706' : '#059669'};font-weight:bold">
-                    ${m.tipo === 'CARGO' ? '+' : '-'} $${m.monto.toFixed(2)}</td>
-                <td style="font-weight:600">$${saldo.toFixed(2)}</td>
-                <td style="font-size:11px;color:#6b7280">${escapar(m.nota || '')}</td></tr>`;
-        }).join('') || `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:16px">Sin movimientos</td></tr>`;
+                <td>${String(f.getDate()).padStart(2,'0')} ${MESES[f.getMonth()]} ${f.getFullYear()}</td>
+                <td class="c gris">${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}</td>
+                <td>${esCargo ? 'Prestamo' : 'Pago'}</td>
+                <td class="n">${esCargo ? dinero(m.monto) : ''}</td>
+                <td class="n">${esCargo ? '' : dinero(m.monto)}</td>
+                <td class="n fuerte">${dinero(saldo)}</td>
+                <td class="gris chica">${escapar(m.nota || '')}</td></tr>`;
+        }).join('') || '<tr><td colspan="7" class="c gris vacia">Sin movimientos registrados</td></tr>';
 
-        cuerpo += `<div class="bloque">
-            <h2>${escapar(d.nombre)} <span class="est ${a.estado}">${ETIQUETA[a.estado]}${a.estado === 'ATRASADO' ? ' · ' + a.mora + ' dias' : ''}</span></h2>
-            <p class="sub">${d.telefono ? 'Tel: ' + escapar(d.telefono) + ' · ' : ''}Dia de pago: ${d.diaPago} de cada mes ·
-               Prestado: $${totalPrestado(d).toFixed(2)} · Pagado: $${totalPagado(d).toFixed(2)} ·
-               <strong>Saldo: $${Math.max(0,a.saldo).toFixed(2)}</strong></p>
+        const vence = a.estado === 'PAGADO' ? 'Deuda saldada'
+            : a.estado === 'ATRASADO' ? `Venció el ${fmtFechaCorta(fechaCorte(a.prox.getFullYear(), a.prox.getMonth()-1, d.diaPago))}, ${a.mora} ${a.mora === 1 ? 'día' : 'días'} de atraso`
+            : `Próximo pago el ${fmtFechaCorta(a.prox)}`;
+
+        return `<section>
+            <div class="jefe">
+                <div>
+                    <h2>${escapar(d.nombre)} <span class="pt ${a.estado}"></span><span class="est">${ETIQUETA[a.estado]}</span></h2>
+                    <p class="meta">${d.telefono ? escapar(d.telefono) + ' &nbsp;·&nbsp; ' : ''}Paga el ${d.diaPago} de cada mes &nbsp;·&nbsp; ${vence}</p>
+                </div>
+                <div class="saldo">
+                    <span class="et">Saldo pendiente</span>
+                    <span class="v">${dinero(Math.max(0, a.saldo))}</span>
+                </div>
+            </div>
             ${d.notas ? `<p class="nota">${escapar(d.notas)}</p>` : ''}
-            <table><tr><th>Fecha y hora</th><th>Tipo</th><th>Monto</th><th>Saldo</th><th>Nota</th></tr>${filas}</table>
-        </div>`;
-    });
+            <table>
+                <thead><tr>
+                    <th>Fecha</th><th class="c">Hora</th><th>Concepto</th>
+                    <th class="n">Préstamo</th><th class="n">Pago</th><th class="n">Saldo</th><th>Nota</th>
+                </tr></thead>
+                <tbody>${filas}</tbody>
+                <tfoot><tr>
+                    <td colspan="3">Totales</td>
+                    <td class="n">${dinero(totalPrestado(d))}</td>
+                    <td class="n">${dinero(totalPagado(d))}</td>
+                    <td class="n">${dinero(Math.max(0, a.saldo))}</td>
+                    <td></td>
+                </tr></tfoot>
+            </table>
+        </section>`;
+    }).join('');
 
-    const html = `<html><head><meta charset="UTF-8"><title>Reporte de deudores</title><style>
-        /* Sin print-color-adjust Chrome imprime las cabeceras y los badges en
-           blanco, salvo que el usuario acuerde marcar "Graficos de fondo". */
-        *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-        @page{size:A4;margin:14mm}
-        body{font-family:'Segoe UI',sans-serif;padding:28px;color:#333}
-        .cab{text-align:center;border-bottom:3px solid #667eea;padding-bottom:14px;margin-bottom:20px}
-        .cab img{max-width:180px;border-radius:8px;margin-bottom:8px}
-        .cab h1{font-size:22px;color:#4c1d95}
-        .cab .fecha{font-size:12px;color:#9ca3af}
-        .tot{display:flex;gap:14px;margin-bottom:24px}
-        .tot div{flex:1;background:#f0f9ff;border-left:4px solid #667eea;padding:12px;border-radius:5px}
-        .tot .l{font-size:11px;color:#6b7280;text-transform:uppercase}
-        .tot .v{font-size:22px;font-weight:bold;color:#667eea}
-        .bloque{margin-bottom:26px;page-break-inside:avoid}
-        h2{font-size:17px;color:#4c1d95;border-bottom:1px solid #e5e7eb;padding-bottom:6px}
-        .est{font-size:11px;padding:3px 9px;border-radius:20px;vertical-align:middle}
-        .est.AL_DIA{background:#d1fae5;color:#059669}.est.POR_VENCER{background:#fef3c7;color:#b45309}
-        .est.ATRASADO{background:#fee2e2;color:#dc2626}.est.PAGADO{background:#e0e7ff;color:#4338ca}
-        .sub{font-size:12px;color:#6b7280;margin:6px 0 4px}
-        .nota{font-size:12px;color:#6b7280;font-style:italic;margin-bottom:6px}
-        table{border-collapse:collapse;width:100%;font-size:12px;margin-top:8px}
-        th{background:#667eea;color:white;padding:8px;text-align:left}
-        td{padding:7px 8px;border-bottom:1px solid #e5e7eb}
+    const html = `<html><head><meta charset="UTF-8"><title>Estado de cuentas por cobrar</title><style>
+        /* Sin print-color-adjust Chrome descarta los fondos para ahorrar tinta
+           y los acentos de color no se imprimen. */
+        *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
+        @page{size:A4;margin:16mm 14mm}
+        body{font-family:'Segoe UI',Calibri,Arial,sans-serif;color:#1f2937;font-size:10pt;margin:0;
+             font-variant-numeric:tabular-nums}
+        h1,h2{margin:0;font-weight:600}
+
+        /* Encabezado: alineado a la izquierda, no centrado. Una sola regla fina. */
+        header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;
+               border-bottom:1.5px solid #4f46e5;padding-bottom:10px;margin-bottom:4px}
+        header img{max-height:52px;max-width:150px}
+        header h1{font-size:16pt;letter-spacing:-0.2px}
+        header .fecha{font-size:8pt;color:#6b7280;text-align:right;line-height:1.5}
+
+        /* Unico bloque con relleno de todo el documento: las cifras clave. */
+        .kpis{display:flex;gap:0;margin:16px 0 22px;background:#f8f8fb;border-radius:4px;overflow:hidden}
+        .kpis div{flex:1;padding:11px 14px;border-right:1px solid #e8e8ef}
+        .kpis div:last-child{border-right:0}
+        .kpis .et{font-size:7.5pt;text-transform:uppercase;letter-spacing:0.7px;color:#6b7280;
+                  display:block;margin-bottom:3px}
+        .kpis .v{font-size:15pt;font-weight:600}
+        .kpis .v.ind{color:#4f46e5}.kpis .v.ver{color:#059669}.kpis .v.roj{color:#dc2626}
+
+        h3{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#6b7280;
+           font-weight:600;margin:0 0 8px}
+
+        /* Tablas: solo lineas horizontales, sin cuadricula ni cabecera de color. */
+        table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:6px}
+        thead th{font-size:7.5pt;text-transform:uppercase;letter-spacing:0.6px;color:#6b7280;
+                 font-weight:600;text-align:left;padding:0 7px 6px;border-bottom:1.2px solid #9ca3af;
+                 white-space:nowrap}
+        tbody td{padding:6px 7px;border-bottom:1px solid #eeeef3}
+        tbody tr:nth-child(even) td{background:#fafafc}
+        tfoot td{padding:7px;border-top:1.2px solid #9ca3af;font-weight:600;font-size:9pt}
+        .n{text-align:right;white-space:nowrap}
+        .c{text-align:center}
+        .gris{color:#6b7280}
+        .chica{font-size:8pt}
+        .fuerte{font-weight:600}
+        .vacia{padding:16px;font-style:italic}
+
+        /* El color como acento, no como fondo: un punto de 6px por estado. */
+        .pt{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;
+            vertical-align:middle}
+        .pt.AL_DIA{background:#059669}.pt.POR_VENCER{background:#d97706}
+        .pt.ATRASADO{background:#dc2626}.pt.PAGADO{background:#4f46e5}
+
+        section{margin-bottom:22px;break-inside:avoid;page-break-inside:avoid}
+        .jefe{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+              border-bottom:1px solid #e5e7eb;padding-bottom:7px;margin-bottom:9px}
+        .jefe h2{font-size:12pt}
+        .jefe .est{font-size:8.5pt;font-weight:400;color:#6b7280}
+        .meta{margin:3px 0 0;font-size:8.5pt;color:#6b7280}
+        .saldo{text-align:right;white-space:nowrap}
+        .saldo .et{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.7px;color:#6b7280}
+        .saldo .v{font-size:15pt;font-weight:600}
+        .nota{margin:0 0 8px;font-size:8.5pt;color:#6b7280;font-style:italic;
+              border-left:2px solid #e5e7eb;padding-left:8px}
+        .aviso{font-size:8.5pt;color:#dc2626;margin:0 0 18px}
+        footer{margin-top:24px;padding-top:8px;border-top:1px solid #e5e7eb;
+               font-size:7.5pt;color:#9ca3af;display:flex;justify-content:space-between}
         </style></head><body>
-        <div class="cab">${logo && !logo.endsWith('/') ? `<img src="${logo}">` : ''}
-            <h1>Reporte de control de deudores</h1>
-            <div class="fecha">Generado el ${new Date().toLocaleString('es-EC')}</div></div>
-        <div class="tot">
-            <div><div class="l">Por cobrar</div><div class="v">$${totalSaldo.toFixed(2)}</div></div>
-            <div><div class="l">Cobrado</div><div class="v" style="color:#10b981">$${totalPag.toFixed(2)}</div></div>
-            <div><div class="l">Deudores</div><div class="v" style="color:#f59e0b">${APP.deudores.length}</div></div>
+
+        <header>
+            <div>
+                ${logo && !logo.endsWith('/') ? `<img src="${logo}"><br>` : ''}
+                <h1>Estado de cuentas por cobrar</h1>
+            </div>
+            <div class="fecha">Generado el ${new Date().toLocaleDateString('es-EC')}<br>
+                ${new Date().toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit' })}</div>
+        </header>
+
+        <div class="kpis">
+            <div><span class="et">Por cobrar</span><span class="v ind">${dinero(totalSaldo)}</span></div>
+            <div><span class="et">Cobrado</span><span class="v ver">${dinero(totalPag)}</span></div>
+            <div><span class="et">Atrasado</span><span class="v roj">${dinero(r2(atrasados.reduce((s,x) => s + x.a.saldo, 0)))}</span></div>
+            <div><span class="et">Deudores</span><span class="v">${APP.deudores.length}</span></div>
         </div>
+
+        ${atrasados.length ? `<p class="aviso">${atrasados.length} ${atrasados.length === 1 ? 'deudor se pasó' : 'deudores se pasaron'} de su fecha de pago: ${atrasados.map(x => escapar(x.d.nombre) + ' (' + x.a.mora + ' d)').join(', ')}</p>` : ''}
+
+        <h3>Resumen de cartera</h3>
+        <table>
+            <thead><tr>
+                <th>Deudor</th><th class="n">Prestado</th><th class="n">Pagado</th>
+                <th class="n">Saldo</th><th>Estado</th><th class="c">Vence</th>
+            </tr></thead>
+            <tbody>${resumen}</tbody>
+            <tfoot><tr>
+                <td>Total</td>
+                <td class="n">${dinero(totalPrest)}</td>
+                <td class="n">${dinero(totalPag)}</td>
+                <td class="n">${dinero(totalSaldo)}</td>
+                <td colspan="2"></td>
+            </tr></tfoot>
+        </table>
+
+        <h3 style="margin-top:24px">Detalle por deudor</h3>
         ${cuerpo}
-        <p style="font-size:11px;color:#9ca3af;margin-top:20px">Sistema de Control de Deudores</p>
-        <script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>
+
+        <footer><span>Sistema de Control de Deudores</span><span>${new Date().toLocaleDateString('es-EC')}</span></footer>
+        <script>window.onload=function(){setTimeout(function(){window.print()},500)}<\/script>
         </body></html>`;
 
     const w = window.open('', '_blank');
@@ -1184,6 +1603,7 @@ function lanzarConfetti() {
     }
     cargar();
     render();
+    avisarAtrasos(false);
 })();
 </script>
 </body>

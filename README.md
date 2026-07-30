@@ -1,7 +1,7 @@
 # Sistema de Control de Deudores
 
 Aplicación web de una sola página para llevar el control de dinero prestado: quién debe,
-cuánto, desde cuándo y qué ha pagado. Funciona sin servidor y sin internet — se abre
+cuánto, desde cuándo y qué ha pagado. Funciona sin servidor y sin internet, se abre
 haciendo doble clic en `index.html` y guarda todo en el navegador (`localStorage`).
 
 ## Qué hace
@@ -16,13 +16,20 @@ haciendo doble clic en `index.html` y guarda todo en el navegador (`localStorage
 - **Estado calculado.** Al día / Por vencer / Atrasado / Pagado, con los días de mora.
   La franja de color en la parte superior de cada tarjeta permite escanear la pantalla
   de un vistazo.
+- **Panel de avisos.** Si alguien se pasó de su fecha de pago aparece arriba del todo,
+  con los días de atraso y el monto. Un clic sobre el aviso abre directamente el cobro,
+  y en cuanto se registra el pago el aviso desaparece solo, porque el estado se
+  recalcula. Opcionalmente manda una notificación del navegador, como máximo una al día.
 - **Buscador y filtros** por nombre, teléfono y estado, con cuatro criterios de orden.
 - **WhatsApp.** Con el teléfono cargado aparece un enlace que abre el chat con el
   recordatorio del saldo ya escrito.
 - **Notas** por deudor.
 - **Gráficos** de pendiente vs cobrado, cobros acumulados y distribución del saldo.
   Con más de 8 deudores se agrupan los menores en "Otros" para que el eje no se sature.
-- **Exportar** a Excel (todos los movimientos) y a PDF (reporte por deudor).
+- **Exportar a Excel** en `.xlsx` real (no un HTML disfrazado), con dos hojas:
+  *Resumen* con los totales, la tabla de cartera y las gráficas insertadas como imagen,
+  y *Movimientos* con el detalle completo, panel congelado y autofiltro.
+- **Exportar a PDF**: estado de cuenta con resumen de cartera y un bloque por deudor.
 - **Modo oscuro** y logo personalizable.
 
 ## Decisión de diseño importante
@@ -61,11 +68,18 @@ deudor = {
 | Archivo | Qué es |
 |---|---|
 | `index.html` | La aplicación completa: HTML, CSS y JS en un solo archivo |
+| `lib/chart.min.js` | Chart.js 3.9.1, para las gráficas |
+| `lib/exceljs.min.js` | ExcelJS 4.4.0, para generar el `.xlsx` con estilos e imágenes |
 | `portada.jpg` | Logo por defecto del encabezado |
 | `_version_anterior.html` | La versión previa de 2 deudores fijos, guardada como referencia |
 
-Única dependencia externa: Chart.js por CDN. Sin ella la app funciona igual, solo se
-quedan vacíos los gráficos.
+Las dos librerías están guardadas en `lib/` en vez de cargarse desde un CDN, porque la
+app se abre con doble clic desde el disco y tiene que seguir funcionando sin internet.
+Con un CDN, el botón de Excel fallaría en silencio al no haber conexión.
+
+ExcelJS no puede crear gráficos nativos de Excel (ninguna librería gratuita de navegador
+puede). Las gráficas se insertan como imagen PNG generada por Chart.js, que para leer un
+reporte da igual, pero conviene saberlo: no son editables dentro de Excel.
 
 ## Cómo usarlo
 
