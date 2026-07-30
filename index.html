@@ -1341,6 +1341,46 @@ async function exportarExcel() {
     toast('Excel descargado con gráficas', 'exito');
 }
 
+// Dos graficos por deudor para su hoja del reporte: la evolucion de su saldo
+// movimiento a movimiento, y cuanto lleva pagado del total.
+function graficosDeudor(d, a) {
+    const movs = movsOrdenados(d);
+    let s = 0;
+    const labels = [], serie = [];
+    movs.forEach(m => {
+        s = r2(m.tipo === 'CARGO' ? s + m.monto : s - m.monto);
+        const f = new Date(m.ts);
+        labels.push(`${String(f.getDate()).padStart(2,'0')} ${MESES[f.getMonth()]}`);
+        serie.push(s);
+    });
+
+    const linea = graficoPNG({
+        type:'line',
+        data:{ labels: labels.length ? labels : ['Sin movimientos'],
+               datasets:[{ data: serie.length ? serie : [0],
+                   borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,0.10)',
+                   fill:true, tension:0.25, borderWidth:2,
+                   pointBackgroundColor:'#4f46e5', pointBorderColor:'#fff',
+                   pointBorderWidth:1.5, pointRadius:4 }] },
+        options:{ plugins:{ legend:{ display:false } },
+            scales:{ x:{ ticks:{ color:'#6b7280', font:{ size:11 } }, grid:{ display:false } },
+                     y:{ beginAtZero:true, ticks:{ color:'#6b7280', font:{ size:11 },
+                         callback:v => '$' + v }, grid:{ color:'#eeeef3' } } } }
+    }, 640, 250);
+
+    const pagado = totalPagado(d), pendiente = Math.max(0, a.saldo);
+    const dona = graficoPNG({
+        type:'doughnut',
+        data:{ labels:['Pagado','Pendiente'],
+               datasets:[{ data:[pagado, pendiente],
+                   backgroundColor:['#10b981','#dfe1e7'], borderWidth:0 }] },
+        options:{ cutout:'60%', plugins:{ legend:{ position:'bottom',
+            labels:{ color:'#374151', boxWidth:11, font:{ size:11 }, padding:10 } } } }
+    }, 280, 250);
+
+    return { linea, dona };
+}
+
 function generarPDF() {
     if (!APP.deudores.length) return toast('No hay deudores que exportar', 'error');
     const logo = document.getElementById('logoImg').src;
@@ -1384,6 +1424,8 @@ function generarPDF() {
             : a.estado === 'ATRASADO' ? `Venció el ${fmtFechaCorta(fechaCorte(a.prox.getFullYear(), a.prox.getMonth()-1, d.diaPago))}, ${a.mora} ${a.mora === 1 ? 'día' : 'días'} de atraso`
             : `Próximo pago el ${fmtFechaCorta(a.prox)}`;
 
+        const g = graficosDeudor(d, a);
+
         return `<section>
             <div class="jefe">
                 <div>
@@ -1396,6 +1438,16 @@ function generarPDF() {
                 </div>
             </div>
             ${d.notas ? `<p class="nota">${escapar(d.notas)}</p>` : ''}
+            <div class="graf">
+                <div class="g-linea">
+                    <span class="g-tit">Evolución del saldo</span>
+                    <img src="${g.linea}" alt="">
+                </div>
+                <div class="g-dona">
+                    <span class="g-tit">Avance del pago</span>
+                    <img src="${g.dona}" alt="">
+                </div>
+            </div>
             <table>
                 <thead><tr>
                     <th>Fecha</th><th class="c">Hora</th><th>Concepto</th>
@@ -1462,7 +1514,17 @@ function generarPDF() {
         .pt.AL_DIA{background:#059669}.pt.POR_VENCER{background:#d97706}
         .pt.ATRASADO{background:#dc2626}.pt.PAGADO{background:#4f46e5}
 
-        section{margin-bottom:22px;break-inside:avoid;page-break-inside:avoid}
+        /* Cada deudor arranca en su propia hoja: su estado de cuenta nunca se
+           mezcla con el del siguiente. Las filas si evitan partirse. */
+        section{break-before:page;page-break-before:always;padding-top:2px}
+        tr{break-inside:avoid;page-break-inside:avoid}
+        .graf{display:flex;gap:16px;align-items:center;margin:12px 0 16px;
+              break-inside:avoid;page-break-inside:avoid}
+        .g-linea{flex:1;min-width:0}
+        .g-dona{width:180px;flex-shrink:0}
+        .graf img{width:100%;height:auto;display:block}
+        .g-tit{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:0.7px;
+               color:#6b7280;margin-bottom:2px}
         .jefe{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
               border-bottom:1px solid #e5e7eb;padding-bottom:7px;margin-bottom:9px}
         .jefe h2{font-size:12pt}
@@ -1512,7 +1574,6 @@ function generarPDF() {
             </tr></tfoot>
         </table>
 
-        <h3 style="margin-top:24px">Detalle por deudor</h3>
         ${cuerpo}
 
         <footer><span>Sistema de Control de Deudores</span><span>${new Date().toLocaleDateString('es-EC')}</span></footer>
