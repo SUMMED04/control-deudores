@@ -1,5 +1,28 @@
 # Sistema de Control de Deudores
 
+Dos versiones que comparten las mismas reglas:
+
+| | Dónde | Para qué |
+|---|---|---|
+| **Web** | `index.html` | Escritorio. Genera el PDF y el Excel. |
+| **Android** | `android/` | Móvil. Avisa el día de cobro aunque esté cerrada. |
+
+El APK se compila solo en GitHub Actions al tocar `android/` y queda en el release
+`ultima-version` como `SummedDeudores.apk`.
+
+## Diferencia que importa entre las dos
+
+La web solo puede avisarte cuando la abres. La app de Android programa una alarma real
+con `setAlarmClock`, así que el aviso llega el día de cobro aunque no la hayas abierto.
+Se usa `setAlarmClock` y no `setExactAndAllowWhileIdle` porque es lo único que atraviesa
+el modo Doze de forma fiable: con el teléfono dormido, un recordatorio del día 15 se
+retrasaría horas. La alarma se vuelve a programar tras cada cobro, al reiniciar el
+teléfono y al actualizar la app, porque es de un solo uso y no sobrevive al reinicio.
+
+Los datos de cada versión son independientes: la web guarda en el navegador y la app en
+el teléfono. No se sincronizan.
+
+
 Aplicación web de una sola página para llevar el control de dinero prestado: quién debe,
 cuánto, desde cuándo y qué ha pagado. Funciona sin servidor y sin internet, se abre
 haciendo doble clic en `index.html` y guarda todo en el navegador (`localStorage`).
