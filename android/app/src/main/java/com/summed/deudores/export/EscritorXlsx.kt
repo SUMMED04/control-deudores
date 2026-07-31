@@ -29,12 +29,13 @@ class EscritorXlsx {
         data object Vacia : Celda() { override val estilo = Estilo.NORMAL }
     }
 
-    private class Hoja(
-        val nombre: String,
-        val anchos: List<Int>,
-        val congelarPrimeraFila: Boolean
+    // No puede ser private: la expone el constructor publico de Constructor.
+    class Hoja internal constructor(
+        internal val nombre: String,
+        internal val anchos: List<Int>,
+        internal val congelarPrimeraFila: Boolean
     ) {
-        val filas = mutableListOf<List<Celda>>()
+        internal val filas = mutableListOf<List<Celda>>()
     }
 
     private val hojas = mutableListOf<Hoja>()

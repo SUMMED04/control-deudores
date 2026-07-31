@@ -292,7 +292,9 @@ object ExportadorPdf {
             c.drawText(valor, x, y + 36f, pintura(15f, color, true))
             if (i > 0) {
                 val xl = MARGEN + i * ancho
-                c.drawLine(xl, y + 8f, xl, y + 38f, Paint().apply { color = LINEA; strokeWidth = 0.8f })
+                // this.color explicito: dentro del apply, "color" a secas apunta
+                // a la variable desestructurada del bucle, no a la del Paint.
+                c.drawLine(xl, y + 8f, xl, y + 38f, Paint().apply { this.color = LINEA; strokeWidth = 0.8f })
             }
         }
         return y + 46f
