@@ -224,11 +224,17 @@ table td { padding:8px; border-bottom:1px solid #eee; }
 .vacio p { color:#9ca3af; margin-bottom:18px; }
 
 /* ---------- GRAFICOS ---------- */
+/* El canvas va dentro de un envoltorio flexible: si cuelga directo del
+   contenedor, Chart.js lo dimensiona al alto total y el titulo lo empuja,
+   recortando las etiquetas del eje de abajo. */
 .chart-container {
     background:white; border-radius:10px; box-shadow:0 1px 3px rgba(16,24,40,0.06), 0 8px 24px rgba(16,24,40,0.07);
-    padding:20px; margin-bottom:20px; height:400px;
+    padding:20px; margin-bottom:20px; height:420px;
+    display:flex; flex-direction:column;
 }
-.chart-title { font-size:17px; font-weight:bold; margin-bottom:12px; color:#333; }
+.chart-title { font-size:17px; font-weight:bold; margin-bottom:12px; color:#333; flex-shrink:0; }
+.chart-box { flex:1; min-height:0; position:relative; }
+.chart-box canvas { position:absolute; inset:0; }
 
 /* ---------- MODALES ---------- */
 .overlay {
@@ -381,15 +387,15 @@ body.dark-mode .btn-icono.rojo:hover { background:#7f1d1d; }
     <div id="zonaGraficos">
         <div class="chart-container">
             <div class="chart-title">📊 Saldo pendiente vs cobrado por deudor</div>
-            <canvas id="chartBarras"></canvas>
+            <div class="chart-box"><canvas id="chartBarras"></canvas></div>
         </div>
         <div class="chart-container">
             <div class="chart-title">📈 Cobros acumulados en el tiempo</div>
-            <canvas id="chartHistorial"></canvas>
+            <div class="chart-box"><canvas id="chartHistorial"></canvas></div>
         </div>
-        <div class="chart-container" style="height:350px">
+        <div class="chart-container" style="height:370px">
             <div class="chart-title">🥧 Distribución del saldo pendiente</div>
-            <canvas id="chartPie"></canvas>
+            <div class="chart-box"><canvas id="chartPie"></canvas></div>
         </div>
     </div>
 
@@ -1065,7 +1071,8 @@ function actualizarGraficos(conAnalisis) {
     const grid = dark ? '#3a3a4a' : '#e5e7eb';
     const base = { responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ labels:{ color:txt, boxWidth:14 } } },
-        scales:{ x:{ ticks:{ color:txt }, grid:{ color:grid } }, y:{ ticks:{ color:txt }, grid:{ color:grid }, beginAtZero:true } } };
+        scales:{ x:{ ticks:{ color:txt, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:{ color:grid } },
+                 y:{ ticks:{ color:txt }, grid:{ color:grid }, beginAtZero:true } } };
 
     const t = topDeudores(conAnalisis, 8);
 
@@ -1084,7 +1091,12 @@ function actualizarGraficos(conAnalisis) {
     pagos.sort((a,b) => new Date(a.ts) - new Date(b.ts));
     let acum = 0;
     const labels = [], datos = [];
-    pagos.forEach(m => { acum = r2(acum + m.monto); labels.push(fmtFechaHora(m.ts).split(' ·')[0]); datos.push(acum); });
+    // Etiqueta corta "22 jul": con el año completo Chart.js las rota y se cortan.
+    pagos.forEach(m => {
+        acum = r2(acum + m.monto);
+        labels.push(fmtFechaCorta(new Date(m.ts)));
+        datos.push(acum);
+    });
 
     if (chartHistorial) chartHistorial.destroy();
     chartHistorial = new Chart(document.getElementById('chartHistorial'), {
