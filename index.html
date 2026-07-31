@@ -1155,190 +1155,232 @@ async function exportarExcel() {
     wb.creator = 'Sistema de Control de Deudores';
     wb.created = new Date();
 
-    // ---------- HOJA 1: RESUMEN ----------
-    const rs = wb.addWorksheet('Resumen', { views:[{ showGridLines:false }] });
-    rs.columns = [
-        { width:26 }, { width:16 }, { width:11 }, { width:14 },
-        { width:14 }, { width:14 }, { width:14 }, { width:12 }
+    const fmtFecha = ts => { const f = new Date(ts); return new Date(f.getFullYear(), f.getMonth(), f.getDate()); };
+
+    // =================================================================
+    // HOJA 1: PANEL
+    // =================================================================
+    const ps = wb.addWorksheet('Panel', { views:[{ showGridLines:false }] });
+    ps.columns = [
+        { width:24 }, { width:14 }, { width:14 }, { width:14 },
+        { width:12 }, { width:16 }, { width:11 }, { width:14 }
     ];
 
-    rs.mergeCells('A1:H1');
-    const tit = rs.getCell('A1');
+    ps.mergeCells('A1:H1');
+    const tit = ps.getCell('A1');
     tit.value = 'Control de deudores';
     tit.font = { name:'Segoe UI', size:18, bold:true, color:{ argb:'FFFFFFFF' } };
     tit.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.INDIGO } };
     tit.alignment = { vertical:'middle', horizontal:'left', indent:1 };
-    rs.getRow(1).height = 34;
+    ps.getRow(1).height = 34;
 
-    rs.mergeCells('A2:H2');
-    const sub = rs.getCell('A2');
+    ps.mergeCells('A2:H2');
+    const sub = ps.getCell('A2');
     sub.value = 'Generado el ' + new Date().toLocaleString('es-EC');
     sub.font = { name:'Segoe UI', size:9, color:{ argb:XL.GRIS_TX } };
     sub.alignment = { indent:1 };
 
     const totalSaldo = r2(conA.reduce((s,x) => s + Math.max(0, x.a.saldo), 0));
     const totalPag   = r2(APP.deudores.reduce((s,d) => s + totalPagado(d), 0));
+    const totalPrest = r2(APP.deudores.reduce((s,d) => s + totalPrestado(d), 0));
     const totalMora  = r2(conA.filter(x => x.a.estado === 'ATRASADO').reduce((s,x) => s + x.a.saldo, 0));
+    const recuperado = totalPrest > 0 ? totalPag / totalPrest : 0;
 
-    const kpis = [
-        ['Por cobrar', totalSaldo, XL.INDIGO],
-        ['Cobrado',    totalPag,   XL.VERDE],
-        ['Atrasado',   totalMora,  XL.ROJO],
-        ['Deudores',   APP.deudores.length, XL.GRIS_TX]
-    ];
-    kpis.forEach((k, i) => {
+    // Cuatro indicadores en A4:H5, cada uno ocupando dos columnas.
+    [['Por cobrar', totalSaldo, XL.INDIGO, XL.MONEDA],
+     ['Cobrado',    totalPag,   XL.VERDE,  XL.MONEDA],
+     ['Atrasado',   totalMora,  XL.ROJO,   XL.MONEDA],
+     ['Recuperado', recuperado, XL.GRIS_TX, '0.0%']
+    ].forEach((k, i) => {
         const col = 1 + i * 2;
-        const cEt = rs.getRow(4).getCell(col);
+        const cEt = ps.getRow(4).getCell(col);
         cEt.value = k[0].toUpperCase();
         cEt.font = { name:'Segoe UI', size:8, bold:true, color:{ argb:XL.GRIS_TX } };
-        const cVa = rs.getRow(5).getCell(col);
+        const cVa = ps.getRow(5).getCell(col);
         cVa.value = k[1];
+        cVa.numFmt = k[3];
         cVa.font = { name:'Segoe UI', size:16, bold:true, color:{ argb:k[2] } };
-        if (i < 3) cVa.numFmt = XL.MONEDA;
     });
-    rs.getRow(5).height = 24;
+    ps.getRow(5).height = 24;
 
-    // Tabla de deudores
-    const CAB = ['Deudor','Teléfono','Día pago','Prestado','Pagado','Saldo','Estado','Días mora'];
-    const filaCab = 7;
-    const rc = rs.getRow(filaCab);
-    CAB.forEach((h, i) => {
-        const c = rc.getCell(i + 1);
-        c.value = h.toUpperCase();
-        c.font = { name:'Segoe UI', size:9, bold:true, color:{ argb:XL.GRIS_TX } };
-        c.border = { bottom:{ style:'medium', color:{ argb:XL.INDIGO } } };
-        c.alignment = { horizontal: i >= 3 && i <= 5 ? 'right' : 'left' };
+    const rot = ps.getCell('A7');
+    rot.value = 'RESUMEN POR DEUDOR';
+    rot.font = { name:'Segoe UI', size:10, bold:true, color:{ argb:XL.GRIS_TX } };
+
+    // Tabla de Excel de verdad: trae botones de filtro, bandas de color y se
+    // amplia sola si el usuario agrega una fila debajo.
+    const FILA_TABLA = 8;
+    ps.addTable({
+        name:'ResumenDeudores', ref:'A' + FILA_TABLA,
+        headerRow:true, totalsRow:true,
+        style:{ theme:'TableStyleMedium2', showRowStripes:true },
+        columns:[
+            { name:'Deudor',   filterButton:true, totalsRowLabel:'Total' },
+            { name:'Prestado', filterButton:false, totalsRowFunction:'sum' },
+            { name:'Pagado',   filterButton:false, totalsRowFunction:'sum' },
+            { name:'Saldo',    filterButton:false, totalsRowFunction:'sum' },
+            { name:'Avance',   filterButton:false },
+            { name:'Estado',   filterButton:true },
+            { name:'Días mora',filterButton:false },
+            { name:'Vence',    filterButton:false }
+        ],
+        rows: conA.map(x => {
+            const prest = totalPrestado(x.d);
+            return [
+                x.d.nombre, prest, totalPagado(x.d), Math.max(0, x.a.saldo),
+                prest > 0 ? totalPagado(x.d) / prest : 0,
+                ETIQUETA[x.a.estado],
+                x.a.estado === 'ATRASADO' ? x.a.mora : null,
+                x.a.estado === 'PAGADO' ? null : fmtFecha(x.a.prox)
+            ];
+        })
     });
 
-    conA.forEach((x, i) => {
-        const f = rs.getRow(filaCab + 1 + i);
-        const est = x.a.estado;
-        f.getCell(1).value = x.d.nombre;
-        // El telefono va como TEXTO: si se guarda como numero, Excel borra el
-        // cero inicial y 0991112233 se convierte en 991112233.
-        const cTel = f.getCell(2);
-        cTel.value = x.d.telefono || '';
-        cTel.numFmt = '@';
-        f.getCell(3).value = x.d.diaPago;
-        f.getCell(4).value = totalPrestado(x.d);
-        f.getCell(5).value = totalPagado(x.d);
-        f.getCell(6).value = Math.max(0, x.a.saldo);
-        f.getCell(7).value = ETIQUETA[est];
-        f.getCell(8).value = est === 'ATRASADO' ? x.a.mora : '';
-        [4,5,6].forEach(c => { f.getCell(c).numFmt = XL.MONEDA; f.getCell(c).alignment = { horizontal:'right' }; });
-        f.getCell(3).alignment = { horizontal:'center' };
-        f.getCell(8).alignment = { horizontal:'center' };
-        f.getCell(6).font = { name:'Segoe UI', size:11, bold:true };
-        f.getCell(7).font = { name:'Segoe UI', size:10, bold:true, color:{ argb:
+    const ultima = FILA_TABLA + conA.length;
+    for (let f = FILA_TABLA + 1; f <= ultima; f++) {
+        const fila = ps.getRow(f);
+        [2,3,4].forEach(c => { fila.getCell(c).numFmt = XL.MONEDA; });
+        fila.getCell(5).numFmt = '0%';
+        fila.getCell(7).alignment = { horizontal:'center' };
+        fila.getCell(8).numFmt = 'dd/mm/yyyy';
+        const est = conA[f - FILA_TABLA - 1].a.estado;
+        fila.getCell(6).font = { name:'Segoe UI', size:11, bold:true, color:{ argb:
             est === 'ATRASADO' ? XL.ROJO : est === 'POR_VENCER' ? XL.AMBAR :
             est === 'PAGADO' ? XL.INDIGO : XL.VERDE } };
-        for (let c = 1; c <= 8; c++) {
-            f.getCell(c).border = { bottom:{ style:'thin', color:{ argb:XL.BORDE } } };
-            if (i % 2) f.getCell(c).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.ZEBRA } };
-        }
+    }
+    [2,3,4].forEach(c => { ps.getRow(ultima + 1).getCell(c).numFmt = XL.MONEDA; });
+
+    // Barra de avance NATIVA de Excel (formato condicional), no una imagen:
+    // si el usuario edita un numero, la barra se mueve sola.
+    ps.addConditionalFormatting({
+        ref: `E${FILA_TABLA + 1}:E${ultima}`,
+        rules: [{
+            type:'dataBar', gradient:false,
+            cfvo:[{ type:'num', value:0 }, { type:'num', value:1 }],
+            color:{ argb:'FF85B7EB' }
+        }]
     });
 
-    const filaTot = filaCab + 1 + conA.length;
-    const ft = rs.getRow(filaTot);
-    ft.getCell(1).value = 'TOTAL';
-    ft.getCell(1).font = { name:'Segoe UI', size:10, bold:true };
-    [[4, r2(APP.deudores.reduce((s,d) => s + totalPrestado(d), 0))], [5, totalPag], [6, totalSaldo]]
-        .forEach(([c, v]) => {
-            const cel = ft.getCell(c);
-            cel.value = v; cel.numFmt = XL.MONEDA;
-            cel.font = { name:'Segoe UI', size:10, bold:true };
-            cel.alignment = { horizontal:'right' };
-        });
-    for (let c = 1; c <= 8; c++) ft.getCell(c).border = { top:{ style:'medium', color:{ argb:'FF9CA3AF' } } };
-
-    // Graficas como imagen: ExcelJS no sabe crear graficos nativos de Excel,
-    // pero si insertar imagenes, y para leer un reporte da igual.
+    // Graficas como imagen: ExcelJS no crea graficos nativos de Excel.
     const top = topDeudores(conA, 8);
-    const filaGraf = filaTot + 2;
-    rs.getCell(`A${filaGraf}`).value = 'Pendiente vs cobrado por deudor';
-    rs.getCell(`A${filaGraf}`).font = { name:'Segoe UI', size:11, bold:true };
-
-    const imgBarras = wb.addImage({ base64: graficoPNG({
+    const filaGraf = ultima + 3;
+    ps.getCell(`A${filaGraf}`).value = 'Pendiente vs cobrado por deudor';
+    ps.getCell(`A${filaGraf}`).font = { name:'Segoe UI', size:11, bold:true };
+    ps.addImage(wb.addImage({ base64: graficoPNG({
         type:'bar',
         data:{ labels: top.nombres, datasets:[
-            { label:'Pendiente', data: top.saldos,  backgroundColor:'#4f46e5' },
-            { label:'Cobrado',   data: top.pagados, backgroundColor:'#10b981' } ] },
+            { label:'Pendiente', data: top.saldos,  backgroundColor:'#4f46e5', maxBarThickness:52 },
+            { label:'Cobrado',   data: top.pagados, backgroundColor:'#10b981', maxBarThickness:52 } ] },
         options:{ plugins:{ legend:{ labels:{ color:'#374151' } } },
                   scales:{ x:{ ticks:{ color:'#6b7280' } }, y:{ beginAtZero:true, ticks:{ color:'#6b7280' } } } }
-    }, 760, 340), extension:'png' });
-    rs.addImage(imgBarras, { tl:{ col:0, row:filaGraf }, ext:{ width:760, height:340 } });
+    }, 760, 340), extension:'png' }), { tl:{ col:0, row:filaGraf }, ext:{ width:760, height:340 } });
 
     const filaGraf2 = filaGraf + 19;
-    rs.getCell(`A${filaGraf2}`).value = 'Distribución del saldo pendiente';
-    rs.getCell(`A${filaGraf2}`).font = { name:'Segoe UI', size:11, bold:true };
-    const imgPie = wb.addImage({ base64: graficoPNG({
+    ps.getCell(`A${filaGraf2}`).value = 'Distribución del saldo pendiente';
+    ps.getCell(`A${filaGraf2}`).font = { name:'Segoe UI', size:11, bold:true };
+    ps.addImage(wb.addImage({ base64: graficoPNG({
         type:'doughnut',
         data:{ labels: top.nombres, datasets:[{ data: top.saldos, backgroundColor:PALETA, borderWidth:0 }] },
         options:{ plugins:{ legend:{ position:'right', labels:{ color:'#374151', boxWidth:14 } } } }
-    }, 560, 320), extension:'png' });
-    rs.addImage(imgPie, { tl:{ col:0, row:filaGraf2 }, ext:{ width:560, height:320 } });
+    }, 560, 320), extension:'png' }), { tl:{ col:0, row:filaGraf2 }, ext:{ width:560, height:320 } });
 
-    // ---------- HOJA 2: MOVIMIENTOS ----------
-    const ms = wb.addWorksheet('Movimientos', {
-        views:[{ state:'frozen', ySplit:1, showGridLines:false }]
-    });
-    ms.columns = [
-        { header:'DEUDOR',     key:'deudor', width:24 },
-        { header:'TELÉFONO',   key:'tel',    width:15 },
-        { header:'FECHA',      key:'fecha',  width:13 },
-        { header:'HORA',       key:'hora',   width:9 },
-        { header:'TIPO',       key:'tipo',   width:12 },
-        { header:'PRÉSTAMO',   key:'cargo',  width:13 },
-        { header:'PAGO',       key:'pago',   width:13 },
-        { header:'SALDO',      key:'saldo',  width:13 },
-        { header:'NOTA',       key:'nota',   width:32 }
+    // =================================================================
+    // HOJA 2: DEUDORES (ficha completa de cada uno)
+    // =================================================================
+    const ds = wb.addWorksheet('Deudores', { views:[{ state:'frozen', ySplit:1, showGridLines:false }] });
+    ds.columns = [
+        { width:24 }, { width:15 }, { width:10 }, { width:14 }, { width:11 },
+        { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:14 },
+        { width:14 }, { width:11 }, { width:13 }, { width:34 }
     ];
-    const rcab = ms.getRow(1);
-    rcab.height = 22;
-    rcab.eachCell(c => {
-        c.font = { name:'Segoe UI', size:9, bold:true, color:{ argb:'FFFFFFFF' } };
-        c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.INDIGO } };
-        c.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+    ds.addTable({
+        name:'FichasDeudores', ref:'A1', headerRow:true,
+        style:{ theme:'TableStyleMedium2', showRowStripes:true },
+        columns:[
+            'Deudor','Teléfono','Día pago','Total prestado','Préstamos',
+            'Total pagado','Pagos','Pago promedio','Último pago','Saldo',
+            'Estado','Días mora','Vence','Notas'
+        ].map((n,i) => ({ name:n, filterButton: i === 0 || i === 10 })),
+        rows: conA.map(x => {
+            const cargos = x.d.movimientos.filter(m => m.tipo === 'CARGO');
+            const pagos  = x.d.movimientos.filter(m => m.tipo === 'PAGO');
+            const sumaPagos = totalPagado(x.d);
+            const ult = ultimoPago(x.d);
+            return [
+                x.d.nombre, x.d.telefono || '', x.d.diaPago,
+                totalPrestado(x.d), cargos.length,
+                sumaPagos, pagos.length,
+                pagos.length ? r2(sumaPagos / pagos.length) : 0,
+                ult ? fmtFecha(ult) : null,
+                Math.max(0, x.a.saldo), ETIQUETA[x.a.estado],
+                x.a.estado === 'ATRASADO' ? x.a.mora : null,
+                x.a.estado === 'PAGADO' ? null : fmtFecha(x.a.prox),
+                x.d.notas || ''
+            ];
+        })
     });
+    for (let f = 2; f <= conA.length + 1; f++) {
+        const fila = ds.getRow(f);
+        fila.getCell(2).numFmt = '@';           // telefono como texto: si no, se pierde el 0 inicial
+        [4,6,8,10].forEach(c => { fila.getCell(c).numFmt = XL.MONEDA; });
+        [9,13].forEach(c => { fila.getCell(c).numFmt = 'dd/mm/yyyy'; });
+        [3,5,7,12].forEach(c => { fila.getCell(c).alignment = { horizontal:'center' }; });
+    }
 
-    let n = 0;
+    // =================================================================
+    // HOJA 3: PAGOS (todos los movimientos)
+    // =================================================================
+    const ms = wb.addWorksheet('Pagos', { views:[{ state:'frozen', ySplit:1, showGridLines:false }] });
+    ms.columns = [
+        { width:24 }, { width:13 }, { width:9 }, { width:12 },
+        { width:13 }, { width:13 }, { width:13 }, { width:32 }
+    ];
+    const filas = [];
     conA.forEach(x => {
         let saldo = 0;
         movsOrdenados(x.d).forEach(m => {
             const esCargo = m.tipo === 'CARGO';
             saldo = r2(esCargo ? saldo + m.monto : saldo - m.monto);
             const f = new Date(m.ts);
-            const fila = ms.addRow({
-                deudor: x.d.nombre, tel: x.d.telefono || '',
-                fecha: f, hora: `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}`,
-                tipo: esCargo ? 'Préstamo' : 'Pago',
-                cargo: esCargo ? m.monto : null,
-                pago: esCargo ? null : m.monto,
-                saldo, nota: m.nota || ''
-            });
-            fila.getCell('tel').numFmt = '@';
-            fila.getCell('fecha').numFmt = 'dd/mm/yyyy';
-            fila.getCell('hora').alignment = { horizontal:'center' };
-            ['cargo','pago','saldo'].forEach(k => {
-                fila.getCell(k).numFmt = XL.MONEDA;
-                fila.getCell(k).alignment = { horizontal:'right' };
-            });
-            fila.getCell('cargo').font = { name:'Segoe UI', size:10, color:{ argb:XL.AMBAR } };
-            fila.getCell('pago').font  = { name:'Segoe UI', size:10, color:{ argb:XL.VERDE } };
-            fila.getCell('saldo').font = { name:'Segoe UI', size:10, bold:true };
-            fila.eachCell({ includeEmpty:true }, c => {
-                c.border = { bottom:{ style:'thin', color:{ argb:XL.BORDE } } };
-                if (n % 2) c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:XL.ZEBRA } };
-            });
-            n++;
+            filas.push([
+                x.d.nombre, fmtFecha(m.ts),
+                `${String(f.getHours()).padStart(2,'0')}:${String(f.getMinutes()).padStart(2,'0')}`,
+                esCargo ? 'Préstamo' : 'Pago',
+                esCargo ? m.monto : null,
+                esCargo ? null : m.monto,
+                saldo, m.nota || ''
+            ]);
         });
     });
-    ms.autoFilter = { from:'A1', to:{ row:1, column:9 } };
+    ms.addTable({
+        name:'Movimientos', ref:'A1', headerRow:true,
+        style:{ theme:'TableStyleMedium2', showRowStripes:true },
+        columns:[
+            { name:'Deudor',   filterButton:true },
+            { name:'Fecha',    filterButton:false },
+            { name:'Hora',     filterButton:false },
+            { name:'Concepto', filterButton:true },
+            { name:'Préstamo', filterButton:false },
+            { name:'Pago',     filterButton:false },
+            { name:'Saldo',    filterButton:false },
+            { name:'Nota',     filterButton:false }
+        ],
+        rows: filas
+    });
+    for (let f = 2; f <= filas.length + 1; f++) {
+        const fila = ms.getRow(f);
+        fila.getCell(2).numFmt = 'dd/mm/yyyy';
+        fila.getCell(3).alignment = { horizontal:'center' };
+        [5,6,7].forEach(c => { fila.getCell(c).numFmt = XL.MONEDA; });
+        fila.getCell(5).font = { name:'Segoe UI', size:11, color:{ argb:XL.AMBAR } };
+        fila.getCell(6).font = { name:'Segoe UI', size:11, color:{ argb:XL.VERDE } };
+        fila.getCell(7).font = { name:'Segoe UI', size:11, bold:true };
+    }
 
     const buf = await wb.xlsx.writeBuffer();
     descargarBlob(new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
                   nombreArchivo('xlsx'));
-    toast('Excel descargado con gráficas', 'exito');
+    toast('Excel descargado con las tres hojas', 'exito');
 }
 
 // Dos graficos por deudor para su hoja del reporte: la evolucion de su saldo

@@ -26,10 +26,15 @@ haciendo doble clic en `index.html` y guarda todo en el navegador (`localStorage
 - **Notas** por deudor.
 - **Gráficos** de pendiente vs cobrado, cobros acumulados y distribución del saldo.
   Con más de 8 deudores se agrupan los menores en "Otros" para que el eje no se sature.
-- **Exportar a Excel** en `.xlsx` real (no un HTML disfrazado), con dos hojas:
-  *Resumen* con los totales, la tabla de cartera y las gráficas insertadas como imagen,
-  y *Movimientos* con el detalle completo, panel congelado y autofiltro.
-- **Exportar a PDF**: estado de cuenta con resumen de cartera y un bloque por deudor.
+- **Exportar a Excel** en `.xlsx` real (no un HTML disfrazado), con tres hojas:
+  *Panel* con los cuatro indicadores, la tabla de resumen y las gráficas;
+  *Deudores* con la ficha completa de cada uno; *Pagos* con todos los movimientos.
+  Las tres tablas son tablas de Excel de verdad, con botones de filtro y bandas,
+  y la columna Avance lleva barras de formato condicional nativas, que se recalculan
+  solas si se edita un número.
+- **Exportar a PDF**: una hoja por deudor con su desglose de deuda y tres gráficos
+  (evolución del saldo, avance del pago, y deuda contra pagos por mes), precedidas
+  de una página de resumen de cartera.
 - **Modo oscuro** y logo personalizable.
 
 ## Decisión de diseño importante
