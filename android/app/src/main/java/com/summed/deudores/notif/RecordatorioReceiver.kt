@@ -1,27 +1,19 @@
 package com.summed.deudores.notif
 
-import android.Manifest
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
-import com.summed.deudores.MainActivity
-import com.summed.deudores.R
 import com.summed.deudores.data.BaseDatos
 import com.summed.deudores.data.Estado
 import com.summed.deudores.data.analizar
-import com.summed.deudores.data.r2
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Se dispara en la fecha de corte. Arma el aviso con quien debe y vuelve a
- * programar el siguiente, porque setAlarmClock es de un solo uso.
+ * Se dispara en la fecha de corte. Arma el texto del aviso, se lo pasa al
+ * servicio (que es quien lo hace sonar) y vuelve a programar el siguiente,
+ * porque setAlarmClock es de un solo uso.
  */
 class RecordatorioReceiver : BroadcastReceiver() {
 
@@ -43,16 +35,12 @@ class RecordatorioReceiver : BroadcastReceiver() {
 
         val atrasados = mutableListOf<Pair<String, Int>>()
         val vencenHoy = mutableListOf<String>()
-        var totalDebido = 0.0
 
         for (d in dao.deudores()) {
             val a = analizar(d, dao.movimientosDe(d.id), ahora)
-            when (a.estado) {
-                Estado.ATRASADO -> { atrasados.add(d.nombre to a.diasMora); totalDebido = r2(totalDebido + a.saldo) }
-                Estado.POR_VENCER -> if (a.diasRestantes == 0) {
-                    vencenHoy.add(d.nombre); totalDebido = r2(totalDebido + a.saldo)
-                }
-                else -> Unit
+            when {
+                a.estado == Estado.ATRASADO -> atrasados.add(d.nombre to a.diasMora)
+                a.estado == Estado.POR_VENCER && a.diasRestantes == 0 -> vencenHoy.add(d.nombre)
             }
         }
 
@@ -72,36 +60,11 @@ class RecordatorioReceiver : BroadcastReceiver() {
         val detalle = buildString {
             atrasados.take(4).forEach { (nombre, dias) -> appendLine("$nombre: $dias días de atraso") }
             vencenHoy.take(4).forEach { nombre -> appendLine("$nombre: vence hoy") }
-            val restantes = (atrasados.size + vencenHoy.size) - minOf(4, atrasados.size) - minOf(4, vencenHoy.size)
+            val mostrados = minOf(4, atrasados.size) + minOf(4, vencenHoy.size)
+            val restantes = atrasados.size + vencenHoy.size - mostrados
             if (restantes > 0) append("y $restantes más")
         }.trim()
 
-        val abrir = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        Recordatorios.crearCanal(context)
-        val notif = NotificationCompat.Builder(context, Recordatorios.CANAL)
-            .setSmallIcon(R.drawable.ic_notificacion)
-            .setContentTitle(titulo)
-            .setContentText(detalle.lineSequence().firstOrNull() ?: "")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(detalle))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setAutoCancel(true)
-            .setContentIntent(abrir)
-            .build()
-
-        val permitido = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.POST_NOTIFICATIONS
-        ) == PackageManager.PERMISSION_GRANTED
-        if (permitido) {
-            context.getSystemService(NotificationManager::class.java)
-                .notify(Recordatorios.ID_NOTIFICACION, notif)
-        }
+        ServicioAviso.lanzar(context, titulo, detalle)
     }
 }

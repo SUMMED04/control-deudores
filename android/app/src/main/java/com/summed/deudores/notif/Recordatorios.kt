@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import com.summed.deudores.data.BaseDatos
 import com.summed.deudores.data.Estado
+import com.summed.deudores.data.Preferencias
 import com.summed.deudores.data.analizar
 import com.summed.deudores.data.proximoVencimiento
 import java.util.Calendar
@@ -18,8 +19,6 @@ object Recordatorios {
     const val CANAL = "recordatorios_pago"
     const val ID_NOTIFICACION = 4101
     private const val CODIGO_ALARMA = 9021
-    /** Hora del dia a la que avisa. */
-    private const val HORA_AVISO = 9
 
     fun crearCanal(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -31,6 +30,10 @@ object Recordatorios {
         ).apply {
             description = "Avisa el día de cobro y cuando alguien se atrasa"
             enableVibration(true)
+            // El canal va en silencio a proposito: el tono lo pone ServicioAviso,
+            // que es quien controla cuantos segundos suena. Si el canal tambien
+            // sonara, se oirian dos tonos a la vez.
+            setSound(null, null)
         }
         nm.createNotificationChannel(canal)
     }
@@ -45,6 +48,9 @@ object Recordatorios {
      */
     suspend fun programarProximo(context: Context) {
         val dao = BaseDatos.obtener(context).dao()
+        val prefs = Preferencias.obtener(context)
+        val hora = prefs.horaAviso.value
+        val minuto = prefs.minutoAviso.value
         val deudores = dao.deudores()
         val ahora = System.currentTimeMillis()
 
@@ -58,8 +64,8 @@ object Recordatorios {
             if (a.estado == Estado.ATRASADO) hayAtrasados = true
 
             val venc = proximoVencimiento(d.diaPago, ahora).apply {
-                set(Calendar.HOUR_OF_DAY, HORA_AVISO)
-                set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                set(Calendar.HOUR_OF_DAY, hora)
+                set(Calendar.MINUTE, minuto); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }
             if (venc.timeInMillis > ahora) candidatos.add(venc.timeInMillis)
         }
@@ -69,8 +75,8 @@ object Recordatorios {
         if (hayAtrasados) {
             val mañana = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_MONTH, 1)
-                set(Calendar.HOUR_OF_DAY, HORA_AVISO)
-                set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                set(Calendar.HOUR_OF_DAY, hora)
+                set(Calendar.MINUTE, minuto); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }
             candidatos.add(mañana.timeInMillis)
         }

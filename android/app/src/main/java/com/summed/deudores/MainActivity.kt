@@ -1,13 +1,18 @@
 package com.summed.deudores
 
 import android.Manifest
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -36,8 +41,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import com.summed.deudores.data.Deudor
+import com.summed.deudores.data.Preferencias
+import com.summed.deudores.data.Tema
 import com.summed.deudores.notif.Recordatorios
 import com.summed.deudores.ui.DeudoresScreen
 import com.summed.deudores.ui.DeudoresViewModel
@@ -75,13 +85,22 @@ class MainActivity : ComponentActivity() {
             pedirNotificaciones.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        setContent { TemaDeudores { Pantalla(vm) } }
+        setContent {
+            val prefs = remember { Preferencias.obtener(this) }
+            val tema by prefs.tema.collectAsState()
+            val oscuro = when (tema) {
+                Tema.CLARO -> false
+                Tema.OSCURO -> true
+                Tema.SISTEMA -> isSystemInDarkTheme()
+            }
+            TemaDeudores(oscuro = oscuro) { Pantalla(vm, prefs) }
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Pantalla(vm: DeudoresViewModel) {
+private fun Pantalla(vm: DeudoresViewModel, prefs: Preferencias) {
     var seccion by remember { mutableStateOf(Seccion.DEUDORES) }
     var detalle by remember { mutableStateOf<Long?>(null) }
 
@@ -96,8 +115,31 @@ private fun Pantalla(vm: DeudoresViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val alcance = rememberCoroutineScope()
 
+    val logo by prefs.logo.collectAsState()
+    val fondo by prefs.fondo.collectAsState()
+    val opacidad by prefs.opacidadFondo.collectAsState()
+
+    // La imagen de fondo vive solo aqui, detras de la interfaz. Los reportes se
+    // dibujan aparte, asi que no puede colarse en el PDF ni en el Excel.
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        fondo?.let { archivo ->
+            val bmp = remember(archivo.path, archivo.lastModified()) {
+                runCatching { BitmapFactory.decodeFile(archivo.absolutePath) }.getOrNull()
+            }
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alpha = opacidad,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             CenterAlignedTopAppBar(
@@ -138,22 +180,24 @@ private fun Pantalla(vm: DeudoresViewModel) {
             }
         }
     ) { padding ->
-        Surface(color = MaterialTheme.colorScheme.background) {
-            when {
-                abierta != null -> DetalleScreen(abierta, padding) { vm.borrarMovimiento(it) }
-                seccion == Seccion.DEUDORES -> DeudoresScreen(
-                    vm = vm,
-                    padding = padding,
-                    onCobrar = { cobrando = it },
-                    onAumentar = { aumentando = it },
-                    onEditar = { editando = it.deudor },
-                    onBorrar = { borrando = it },
-                    onAbrir = { detalle = it.deudor.id }
-                )
-                seccion == Seccion.REPORTES -> ReportesScreen(vm, padding)
-                else -> AjustesScreen(vm, padding)
+        when {
+            abierta != null -> DetalleScreen(abierta, padding) { vm.borrarMovimiento(it) }
+            seccion == Seccion.DEUDORES -> DeudoresScreen(
+                vm = vm,
+                padding = padding,
+                logo = logo,
+                onCobrar = { cobrando = it },
+                onAumentar = { aumentando = it },
+                onEditar = { editando = it.deudor },
+                onBorrar = { borrando = it },
+                onAbrir = { detalle = it.deudor.id }
+            )
+            seccion == Seccion.REPORTES -> ReportesScreen(vm, padding)
+            else -> AjustesScreen(vm, padding) { texto ->
+                alcance.launch { snackbar.showMessage(texto) }
             }
         }
+    }
     }
 
     cobrando?.let { f ->
