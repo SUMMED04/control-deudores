@@ -1,0 +1,210 @@
+package com.summed.deudores
+
+import android.Manifest
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.summed.deudores.data.Deudor
+import com.summed.deudores.notif.Recordatorios
+import com.summed.deudores.ui.DeudoresScreen
+import com.summed.deudores.ui.DeudoresViewModel
+import com.summed.deudores.ui.DetalleScreen
+import com.summed.deudores.ui.DialogoAumento
+import com.summed.deudores.ui.DialogoCobro
+import com.summed.deudores.ui.DialogoConfirmar
+import com.summed.deudores.ui.DialogoDeudor
+import com.summed.deudores.ui.Ficha
+import com.summed.deudores.ui.ReportesScreen
+import com.summed.deudores.ui.AjustesScreen
+import com.summed.deudores.ui.dinero
+import com.summed.deudores.ui.theme.TemaDeudores
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
+private enum class Seccion(val titulo: String, val icono: ImageVector) {
+    DEUDORES("Deudores", Icons.Default.Group),
+    REPORTES("Reportes", Icons.Default.PieChart),
+    AJUSTES("Ajustes", Icons.Default.Settings)
+}
+
+class MainActivity : ComponentActivity() {
+
+    private val vm: DeudoresViewModel by viewModels()
+
+    private val pedirNotificaciones =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        Recordatorios.crearCanal(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pedirNotificaciones.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        setContent { TemaDeudores { Pantalla(vm) } }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Pantalla(vm: DeudoresViewModel) {
+    var seccion by remember { mutableStateOf(Seccion.DEUDORES) }
+    var detalle by remember { mutableStateOf<Long?>(null) }
+
+    var cobrando by remember { mutableStateOf<Ficha?>(null) }
+    var aumentando by remember { mutableStateOf<Ficha?>(null) }
+    var editando by remember { mutableStateOf<Deudor?>(null) }
+    var creando by remember { mutableStateOf(false) }
+    var borrando by remember { mutableStateOf<Ficha?>(null) }
+
+    val fichas by vm.fichas.collectAsState()
+    val abierta = detalle?.let { id -> fichas.firstOrNull { it.deudor.id == id } }
+    val snackbar = remember { SnackbarHostState() }
+    val alcance = rememberCoroutineScope()
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(abierta?.deudor?.nombre ?: seccion.titulo) },
+                navigationIcon = {
+                    if (abierta != null) {
+                        IconButton(onClick = { detalle = null }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        },
+        bottomBar = {
+            if (abierta == null) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    Seccion.entries.forEach { s ->
+                        NavigationBarItem(
+                            selected = seccion == s,
+                            onClick = { seccion = s },
+                            icon = { Icon(s.icono, contentDescription = null) },
+                            label = { Text(s.titulo) }
+                        )
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            if (abierta == null && seccion == Seccion.DEUDORES) {
+                FloatingActionButton(onClick = { creando = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Nuevo deudor")
+                }
+            }
+        }
+    ) { padding ->
+        Surface(color = MaterialTheme.colorScheme.background) {
+            when {
+                abierta != null -> DetalleScreen(abierta, padding) { vm.borrarMovimiento(it) }
+                seccion == Seccion.DEUDORES -> DeudoresScreen(
+                    vm = vm,
+                    padding = padding,
+                    onCobrar = { cobrando = it },
+                    onAumentar = { aumentando = it },
+                    onEditar = { editando = it.deudor },
+                    onBorrar = { borrando = it },
+                    onAbrir = { detalle = it.deudor.id }
+                )
+                seccion == Seccion.REPORTES -> ReportesScreen(vm, padding)
+                else -> AjustesScreen(vm, padding)
+            }
+        }
+    }
+
+    cobrando?.let { f ->
+        DialogoCobro(
+            ficha = f,
+            onCerrar = { cobrando = null },
+            onConfirmar = { monto, nota ->
+                vm.registrarPago(f.deudor.id, monto, nota)
+                val queda = f.analisis.saldo - monto
+                alcance.launch(Dispatchers.Main) {
+                    snackbar.showMessage(
+                        if (queda <= 0.001) "${f.deudor.nombre} terminó de pagar"
+                        else "Pago registrado. Quedan ${dinero(queda)}"
+                    )
+                }
+            }
+        )
+    }
+
+    aumentando?.let { f ->
+        DialogoAumento(
+            ficha = f,
+            onCerrar = { aumentando = null },
+            onConfirmar = { monto, nota -> vm.registrarCargo(f.deudor.id, monto, nota) }
+        )
+    }
+
+    if (creando || editando != null) {
+        DialogoDeudor(
+            existente = editando,
+            onCerrar = { creando = false; editando = null },
+            onGuardarNuevo = { nombre, monto, cuota, dia, tel, notas ->
+                vm.crearDeudor(nombre, monto, cuota, dia, tel, notas)
+            },
+            onGuardarEdicion = { vm.editarDeudor(it) }
+        )
+    }
+
+    borrando?.let { f ->
+        DialogoConfirmar(
+            titulo = "Eliminar a ${f.deudor.nombre}",
+            mensaje = "Se borrarán sus ${f.movimientos.size} movimientos y un saldo " +
+                "pendiente de ${dinero(maxOf(0.0, f.analisis.saldo))}.",
+            textoConfirmar = "Sí, eliminar",
+            onCerrar = { borrando = null },
+            onConfirmar = { vm.borrarDeudor(f.deudor) }
+        )
+    }
+}
+
+private suspend fun SnackbarHostState.showMessage(texto: String) {
+    currentSnackbarData?.dismiss()
+    showSnackbar(texto)
+}
