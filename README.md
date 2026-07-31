@@ -22,6 +22,31 @@ teléfono y al actualizar la app, porque es de un solo uso y no sobrevive al rei
 Los datos de cada versión son independientes: la web guarda en el navegador y la app en
 el teléfono. No se sincronizan.
 
+## La app de Android
+
+Además de la lista, el detalle de cada deudor y los reportes, tiene:
+
+- **Hora del aviso** editable, **tono** elegible con el selector del sistema y **duración
+  del sonido** de 5, 10, 20 o 30 segundos, con un botón para probarlo.
+- **Logo** propio, que sale arriba de la lista y en la cabecera del PDF.
+- **Imagen de fondo** con intensidad regulable.
+- **Tema** automático, claro u oscuro.
+- **Exportar a PDF y a Excel** desde el móvil, con el selector de compartir.
+
+El tono lo reproduce `ServicioAviso`, un servicio en primer plano, y no el
+`BroadcastReceiver`: un receiver vive unos segundos y cortaría el sonido a mitad. El canal
+de notificación va en silencio a propósito, porque si sonara él también se oirían dos
+tonos a la vez. Si el tono elegido ya no existe, se cae al de alarma del sistema en vez de
+quedarse mudo.
+
+**La imagen de fondo no aparece en los reportes.** No hay que acordarse de excluirla: el
+PDF se dibuja con `PdfDocument` y el Excel se escribe como XML, así que ninguno de los dos
+hereda nada de la pantalla. Solo sale lo que se dibuja a propósito, y el logo sí se dibuja.
+
+El Excel de la app no usa Apache POI, que pesaría más que el resto de la app junta.
+`EscritorXlsx` genera el `.xlsx` a mano, que no es más que un zip de XML, con las mismas
+tres hojas que la web y el teléfono guardado como texto para no perder el cero inicial.
+
 
 Aplicación web de una sola página para llevar el control de dinero prestado: quién debe,
 cuánto, desde cuándo y qué ha pagado. Funciona sin servidor y sin internet, se abre
