@@ -44,8 +44,17 @@ PDF se dibuja con `PdfDocument` y el Excel se escribe como XML, así que ninguno
 hereda nada de la pantalla. Solo sale lo que se dibuja a propósito, y el logo sí se dibuja.
 
 El Excel de la app no usa Apache POI, que pesaría más que el resto de la app junta.
-`EscritorXlsx` genera el `.xlsx` a mano, que no es más que un zip de XML, con las mismas
-tres hojas que la web y el teléfono guardado como texto para no perder el cero inicial.
+`EscritorXlsx` genera el `.xlsx` a mano, que no es más que un zip de XML: las mismas tres
+hojas que la web, con franja de título, las cuatro tarjetas de indicadores, barras de
+avance de formato condicional y el teléfono guardado como texto para no perder el cero.
+
+**El gráfico del Panel es un gráfico nativo de Excel**, no una imagen, y ahí el móvil gana
+a la web: ExcelJS no sabe crear gráficos y tiene que pegar un PNG, mientras que escribir
+el XML a mano permite montar el `chart1.xml` de verdad. Se le puede hacer clic, cambiarle
+el tipo, y las barras se recalculan solas si se edita una cifra.
+
+La fecha lleva un formato propio `dd/mm/yyyy` en vez del formato 14 de Excel, que depende
+del idioma del equipo y sacaba `15/8/2026`.
 
 
 Aplicación web de una sola página para llevar el control de dinero prestado: quién debe,
