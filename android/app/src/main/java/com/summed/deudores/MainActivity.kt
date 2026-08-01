@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
 import com.summed.deudores.data.Deudor
 import com.summed.deudores.data.Preferencias
 import com.summed.deudores.data.Tema
@@ -157,16 +158,21 @@ private fun Pantalla(vm: DeudoresViewModel, prefs: Preferencias) {
                         }
                     }
                 },
+                // Sin franja de color: el titulo se apoya en el mismo blanco
+                // que el resto de la pantalla, como en el resto del rediseño.
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
         bottomBar = {
             if (abierta == null) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp
+                ) {
                     Seccion.entries.forEach { s ->
                         NavigationBarItem(
                             selected = seccion == s,

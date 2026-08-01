@@ -2,6 +2,8 @@ package com.summed.deudores.ui
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,16 +15,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.summed.deudores.data.Estado
 import com.summed.deudores.data.etiqueta
-import com.summed.deudores.ui.theme.coloresEstado
 
 @Composable
 fun DeudoresScreen(
@@ -56,7 +59,6 @@ fun DeudoresScreen(
     val totales by vm.totales.collectAsState()
     val busqueda by vm.busqueda.collectAsState()
     val filtro by vm.filtro.collectAsState()
-    val c = coloresEstado()
 
     val atrasados = todas.filter { it.analisis.estado == Estado.ATRASADO }
         .sortedByDescending { it.analisis.diasMora }
@@ -89,10 +91,11 @@ fun DeudoresScreen(
 
         if (todas.isNotEmpty()) {
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TarjetaTotal("Por cobrar", dinero(totales.porCobrar), MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                    TarjetaTotal("Atrasado", dinero(totales.atrasado), c.atrasado, Modifier.weight(1f))
-                }
+                ResumenCartera(
+                    porCobrar = totales.porCobrar,
+                    cobrado = totales.cobrado,
+                    atrasado = totales.atrasado
+                )
             }
 
             // El aviso solo existe si hay alguien atrasado o a punto de vencer.
@@ -123,29 +126,36 @@ fun DeudoresScreen(
                     placeholder = { Text("Buscar por nombre o teléfono") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
+            // Filtros como pestañas de texto, no como pastillas de color: el
+            // seleccionado se marca con la tinta y un subrayado.
             item {
                 Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    FilterChip(
-                        selected = filtro == null,
-                        onClick = { vm.filtro.value = null },
-                        label = { Text("Todos") }
-                    )
+                    Pestana("Todos", todas.size, filtro == null) { vm.filtro.value = null }
                     Estado.entries.forEach { est ->
-                        FilterChip(
-                            selected = filtro == est,
-                            onClick = { vm.filtro.value = if (filtro == est) null else est },
-                            label = { Text(est.etiqueta) }
-                        )
+                        val cuantos = todas.count { it.analisis.estado == est }
+                        if (cuantos > 0) {
+                            Pestana(est.etiqueta, cuantos, filtro == est) {
+                                vm.filtro.value = if (filtro == est) null else est
+                            }
+                        }
                     }
                 }
             }
+
+            item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
         }
 
         if (todas.isEmpty()) {
@@ -164,6 +174,29 @@ fun DeudoresScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun Pestana(texto: String, cuantos: Int, activa: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick).padding(bottom = 2.dp)
+    ) {
+        Text(
+            "$texto $cuantos",
+            fontSize = 13.sp,
+            fontWeight = if (activa) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (activa) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(5.dp))
+        Box(
+            Modifier
+                .height(2.dp)
+                .width(if (activa) 26.dp else 0.dp)
+                .background(MaterialTheme.colorScheme.onSurface)
+        )
     }
 }
 

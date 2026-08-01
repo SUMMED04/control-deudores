@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,9 +34,13 @@ import androidx.compose.ui.unit.sp
 import com.summed.deudores.data.Estado
 import com.summed.deudores.ui.theme.coloresEstado
 
+/**
+ * Escala de tinta, no un arcoiris: la dona se lee por tono, y el rojo queda
+ * reservado para lo vencido en vez de gastarse en un deudor cualquiera.
+ */
 private val PALETA = listOf(
-    Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFF10B981), Color(0xFFF59E0B),
-    Color(0xFFEF4444), Color(0xFF0EA5E9), Color(0xFFEC4899), Color(0xFF14B8A6)
+    Color(0xFF14181F), Color(0xFF4A5261), Color(0xFF7C8494), Color(0xFFA9B0BC),
+    Color(0xFFC6CBD4), Color(0xFFDDE0E6), Color(0xFF0F8A5F), Color(0xFFC98A2B)
 )
 
 @Composable
@@ -158,22 +162,21 @@ fun ReportesScreen(vm: DeudoresViewModel, padding: PaddingValues) {
     }
 }
 
+/** Seccion, no tarjeta: un titulo pequeño y una linea que la separa de la anterior. */
 @Composable
 private fun Tarjeta(titulo: String, contenido: @Composable () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                titulo.uppercase(),
-                fontSize = 10.sp, letterSpacing = 0.7.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-            Spacer(Modifier.height(12.dp))
-            contenido()
-        }
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            titulo.uppercase(),
+            fontSize = 9.sp, letterSpacing = 1.4.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(12.dp))
+        contenido()
+        Spacer(Modifier.height(4.dp))
     }
 }
 
