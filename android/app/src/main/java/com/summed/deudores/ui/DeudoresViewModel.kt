@@ -92,20 +92,25 @@ class DeudoresViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- operaciones ----------
 
+    /**
+     * La fecha viene de la pantalla, no del reloj: por defecto es hoy, pero
+     * permite anotar un prestamo viejo sin que quede con la fecha de captura.
+     */
     fun crearDeudor(
         nombre: String, monto: Double, cuota: Double,
-        diaPago: Int, telefono: String, notas: String
+        diaPago: Int, telefono: String, notas: String,
+        fecha: Long = System.currentTimeMillis()
     ) = enIO {
         val id = dao.insertarDeudor(
             Deudor(
                 nombre = nombre.trim(), telefono = telefono.trim(), notas = notas.trim(),
-                diaPago = diaPago, pagoMensual = cuota
+                diaPago = diaPago, pagoMensual = cuota, creadoEn = fecha
             )
         )
         dao.insertarMovimiento(
             Movimiento(
                 deudorId = id, tipo = TipoMovimiento.CARGO,
-                monto = r2(monto), nota = "Préstamo inicial"
+                monto = r2(monto), nota = "Préstamo inicial", fecha = fecha
             )
         )
     }
@@ -116,17 +121,29 @@ class DeudoresViewModel(app: Application) : AndroidViewModel(app) {
 
     fun borrarTodo() = enIO { dao.borrarTodo() }
 
-    /** Registra un cobro. La fecha y la hora las pone el sistema, no el usuario. */
-    fun registrarPago(deudorId: Long, monto: Double, nota: String) = enIO {
+    /** Registra un cobro en la fecha que se eligio, que por defecto es hoy. */
+    fun registrarPago(
+        deudorId: Long, monto: Double, nota: String,
+        fecha: Long = System.currentTimeMillis()
+    ) = enIO {
         dao.insertarMovimiento(
-            Movimiento(deudorId = deudorId, tipo = TipoMovimiento.PAGO, monto = r2(monto), nota = nota.trim())
+            Movimiento(
+                deudorId = deudorId, tipo = TipoMovimiento.PAGO,
+                monto = r2(monto), nota = nota.trim(), fecha = fecha
+            )
         )
     }
 
     /** Suma deuda: un prestamo nuevo, que queda en el historial. */
-    fun registrarCargo(deudorId: Long, monto: Double, nota: String) = enIO {
+    fun registrarCargo(
+        deudorId: Long, monto: Double, nota: String,
+        fecha: Long = System.currentTimeMillis()
+    ) = enIO {
         dao.insertarMovimiento(
-            Movimiento(deudorId = deudorId, tipo = TipoMovimiento.CARGO, monto = r2(monto), nota = nota.trim())
+            Movimiento(
+                deudorId = deudorId, tipo = TipoMovimiento.CARGO,
+                monto = r2(monto), nota = nota.trim(), fecha = fecha
+            )
         )
     }
 

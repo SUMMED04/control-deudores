@@ -64,6 +64,12 @@ import com.summed.deudores.ui.theme.TemaDeudores
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+/**
+ * Marca del build, igual que en las otras apps: sirve para saber de un vistazo
+ * qué APK está instalado sin adivinar si un arreglo ya entró o no.
+ */
+const val BUILD_TAG = "2026.08.01-1"
+
 private enum class Seccion(val titulo: String, val icono: ImageVector) {
     DEUDORES("Deudores", Icons.Default.Group),
     REPORTES("Reportes", Icons.Default.PieChart),
@@ -204,8 +210,8 @@ private fun Pantalla(vm: DeudoresViewModel, prefs: Preferencias) {
         DialogoCobro(
             ficha = f,
             onCerrar = { cobrando = null },
-            onConfirmar = { monto, nota ->
-                vm.registrarPago(f.deudor.id, monto, nota)
+            onConfirmar = { monto, nota, fecha ->
+                vm.registrarPago(f.deudor.id, monto, nota, fecha)
                 val queda = f.analisis.saldo - monto
                 alcance.launch(Dispatchers.Main) {
                     snackbar.showMessage(
@@ -221,7 +227,7 @@ private fun Pantalla(vm: DeudoresViewModel, prefs: Preferencias) {
         DialogoAumento(
             ficha = f,
             onCerrar = { aumentando = null },
-            onConfirmar = { monto, nota -> vm.registrarCargo(f.deudor.id, monto, nota) }
+            onConfirmar = { monto, nota, fecha -> vm.registrarCargo(f.deudor.id, monto, nota, fecha) }
         )
     }
 
@@ -229,8 +235,8 @@ private fun Pantalla(vm: DeudoresViewModel, prefs: Preferencias) {
         DialogoDeudor(
             existente = editando,
             onCerrar = { creando = false; editando = null },
-            onGuardarNuevo = { nombre, monto, cuota, dia, tel, notas ->
-                vm.crearDeudor(nombre, monto, cuota, dia, tel, notas)
+            onGuardarNuevo = { nombre, monto, cuota, dia, tel, notas, fecha ->
+                vm.crearDeudor(nombre, monto, cuota, dia, tel, notas, fecha)
             },
             onGuardarEdicion = { vm.editarDeudor(it) }
         )
