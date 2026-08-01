@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -95,6 +97,7 @@ fun AjustesScreen(
     var confirmarBorrado by remember { mutableStateOf(false) }
     var eligiendoHora by remember { mutableStateOf(false) }
     var exportando by remember { mutableStateOf(false) }
+    var eligiendoDeudor by remember { mutableStateOf(false) }
 
     val alarmasExactas = remember(hora) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
@@ -304,33 +307,66 @@ fun AjustesScreen(
             }
         }
 
-        Bloque("Exportar") {
+        Bloque("Exportar en PDF") {
             Text(
-                "El reporte se genera y se abre el selector para que elijas dónde " +
-                    "guardarlo o a quién enviarlo.",
+                "Tres reportes distintos. El archivo se genera y se abre el selector " +
+                    "para que elijas dónde guardarlo o a quién enviarlo.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+            )
+            Spacer(Modifier.height(12.dp))
+
+            OpcionPdf(
+                titulo = "Cartera completa",
+                detalle = "Todo junto: cifras, la línea de tiempo de cada deuda, lo que viene y el resumen.",
+                habilitado = fichas.isNotEmpty() && !exportando
+            ) {
+                exportando = true
+                alcance.launch {
+                    val r = runCatching {
+                        withContext(Dispatchers.IO) { ExportadorPdf.general(contexto, fichas, logo) }
+                    }
+                    exportando = false
+                    r.onSuccess { Compartir.pdf(contexto, it) }
+                        .onFailure { onMensaje("No se pudo generar el PDF") }
+                }
+            }
+
+            OpcionPdf(
+                titulo = "Un deudor",
+                detalle = "Estado de cuenta de una sola persona, con su historial y espacio para firmar.",
+                habilitado = fichas.isNotEmpty() && !exportando
+            ) { eligiendoDeudor = true }
+
+            OpcionPdf(
+                titulo = "Todos los deudores",
+                detalle = "Una ficha por persona, dos por hoja, ordenadas por saldo.",
+                habilitado = fichas.isNotEmpty() && !exportando
+            ) {
+                exportando = true
+                alcance.launch {
+                    val r = runCatching {
+                        withContext(Dispatchers.IO) { ExportadorPdf.todos(contexto, fichas, logo) }
+                    }
+                    exportando = false
+                    r.onSuccess { Compartir.pdf(contexto, it) }
+                        .onFailure { onMensaje("No se pudo generar el PDF") }
+                }
+            }
+            if (exportando) {
+                Spacer(Modifier.height(8.dp))
+                Text("Generando...", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        Bloque("Exportar en Excel") {
+            Text(
+                "La misma información en una hoja de cálculo, con su gráfico.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
             )
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        exportando = true
-                        alcance.launch {
-                            val r = runCatching {
-                                withContext(Dispatchers.IO) {
-                                    ExportadorPdf.generar(contexto, fichas, logo)
-                                }
-                            }
-                            exportando = false
-                            r.onSuccess { Compartir.pdf(contexto, it) }
-                                .onFailure { onMensaje("No se pudo generar el PDF") }
-                        }
-                    },
-                    enabled = fichas.isNotEmpty() && !exportando,
-                    modifier = Modifier.weight(1f)
-                ) { Text("PDF") }
-
                 Button(
                     onClick = {
                         exportando = true
@@ -347,11 +383,7 @@ fun AjustesScreen(
                     },
                     enabled = fichas.isNotEmpty() && !exportando,
                     modifier = Modifier.weight(1f)
-                ) { Text("Excel") }
-            }
-            if (exportando) {
-                Spacer(Modifier.height(8.dp))
-                Text("Generando...", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                ) { Text("Generar Excel") }
             }
         }
 
@@ -444,6 +476,50 @@ fun AjustesScreen(
         )
     }
 
+    // El estado de cuenta es de una persona, asi que hay que decir de quien.
+    if (eligiendoDeudor) {
+        AlertDialog(
+            onDismissRequest = { eligiendoDeudor = false },
+            title = { Text("¿De quién?") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    fichas.sortedByDescending { it.analisis.saldo }.forEach { f ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    eligiendoDeudor = false
+                                    exportando = true
+                                    alcance.launch {
+                                        val r = runCatching {
+                                            withContext(Dispatchers.IO) {
+                                                ExportadorPdf.individual(contexto, f, logo)
+                                            }
+                                        }
+                                        exportando = false
+                                        r.onSuccess { Compartir.pdf(contexto, it) }
+                                            .onFailure { onMensaje("No se pudo generar el PDF") }
+                                    }
+                                }
+                                .padding(vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(f.deudor.nombre, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            Text(
+                                dinero(maxOf(0.0, f.analisis.saldo)),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { eligiendoDeudor = false }) { Text("Cancelar") } }
+        )
+    }
+
     if (confirmarBorrado) {
         DialogoConfirmar(
             titulo = "Borrar todo",
@@ -485,6 +561,45 @@ private fun abrirAjustesNotificaciones(contexto: Context) {
             }
         )
     }
+}
+
+/**
+ * Fila de reporte: nombre, para que sirve y una flecha. Se lee como una lista
+ * de opciones, no como tres botones iguales sin explicacion.
+ */
+@Composable
+private fun OpcionPdf(titulo: String, detalle: String, habilitado: Boolean, onClick: () -> Unit) {
+    val alfa = if (habilitado) 1f else 0.4f
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = habilitado, onClick = onClick)
+            .padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                titulo,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alfa)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                detalle,
+                fontSize = 11.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alfa)
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alfa),
+            modifier = Modifier.size(17.dp)
+        )
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 /** Seccion separada por una linea, sin tarjeta ni sombra. */
